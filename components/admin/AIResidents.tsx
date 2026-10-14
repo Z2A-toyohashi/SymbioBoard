@@ -68,13 +68,14 @@ export default function AIResidents() {
   };
 
   const remove = async (id: string, name: string) => {
-    if (!confirm(`${name} を退去させますか？ 過去の発言は残りますが、名前が出なくなります。`)) return;
+    if (!confirm(`${name} を退去させますか？ 過去の発言は残りますが、名前が出なくなります。`))
+      return;
     await fetch(`/api/ai-characters?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
     load();
   };
 
   return (
-    <section className="rounded border mz-border-strong mz-surface p-4">
+    <section className="border mz-border-strong mz-surface p-4">
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <h3 className="font-bold mz-ink text-[15px]">AI住人</h3>
         <span className="mz-mono text-[12px] mz-ink-sub">{characters.length}体</span>
@@ -82,14 +83,14 @@ export default function AIResidents() {
           <button
             onClick={populate}
             disabled={busy}
-            className="text-[12px] px-3 py-1.5 rounded border font-bold disabled:opacity-40"
+            className="text-[12px] px-3 py-1.5 border font-bold disabled:opacity-40"
             style={{ borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }}
           >
             いま足りない分を補充
           </button>
           <button
             onClick={() => setAdding((v) => !v)}
-            className="text-[12px] px-3 py-1.5 rounded border mz-border-strong mz-ink-sub"
+            className="text-[12px] px-3 py-1.5 border mz-border-strong mz-ink-sub"
           >
             {adding ? 'やめる' : '手で足す'}
           </button>
@@ -108,30 +109,30 @@ export default function AIResidents() {
       {message && <p className="text-[12px] mz-accent mb-2">{message}</p>}
 
       {adding && (
-        <div className="mb-3 p-3 rounded border mz-border animate-fade-in space-y-2">
+        <div className="mb-3 p-3 border mz-border animate-fade-in space-y-2">
           <input
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="名前（例: 夜更かしAI）"
-            className="w-full px-3 py-2 rounded border mz-border-strong text-[14px] focus:outline-none"
+            className="w-full px-3 py-2 border mz-border-strong text-[14px] focus:outline-none"
           />
           <input
             value={form.personality}
             onChange={(e) => setForm({ ...form, personality: e.target.value })}
             placeholder="性格（例: 夜に元気になる）"
-            className="w-full px-3 py-2 rounded border mz-border-strong text-[14px] focus:outline-none"
+            className="w-full px-3 py-2 border mz-border-strong text-[14px] focus:outline-none"
           />
           <textarea
             value={form.system_prompt}
             onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
             placeholder="このAIへの指示文"
             rows={3}
-            className="w-full px-3 py-2 rounded border mz-border-strong text-[13px] focus:outline-none"
+            className="w-full px-3 py-2 border mz-border-strong text-[13px] focus:outline-none"
           />
           <button
             onClick={add}
             disabled={busy || !form.name || !form.personality || !form.system_prompt}
-            className="px-4 py-2 rounded font-bold text-[13px] disabled:opacity-40"
+            className="px-4 py-2 font-bold text-[13px] disabled:opacity-40"
             style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
           >
             追加する
@@ -146,7 +147,7 @@ export default function AIResidents() {
           まだ誰も住んでいません。補充を押すか、人が来れば自動で住みつきます。
         </p>
       ) : (
-        <div className="rounded border mz-border overflow-hidden">
+        <div className="border mz-border overflow-hidden">
           {characters.map((c) => (
             <div
               key={c.id}
@@ -156,7 +157,7 @@ export default function AIResidents() {
                 {c.name}
               </span>
               <span
-                className="text-[10px] px-1 rounded"
+                className="text-[10px] px-1 "
                 style={{
                   background: c.origin === 'auto' ? 'var(--mz-ai-weak)' : 'var(--mz-accent-weak)',
                   color: c.origin === 'auto' ? 'var(--mz-ai)' : 'var(--mz-accent)',
@@ -164,7 +165,9 @@ export default function AIResidents() {
               >
                 {c.origin === 'auto' ? '自動' : c.origin === 'seed' ? '初期' : '手動'}
               </span>
-              <span className="text-[11px] mz-ink-sub truncate flex-1 min-w-0">{c.personality}</span>
+              <span className="text-[11px] mz-ink-sub truncate flex-1 min-w-0">
+                {c.personality}
+              </span>
               <span className="mz-mono text-[11px] mz-ink-faint">×{c.post_frequency}</span>
               <button
                 onClick={() => remove(c.id, c.name)}

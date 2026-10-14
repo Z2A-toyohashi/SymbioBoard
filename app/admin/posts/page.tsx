@@ -36,31 +36,33 @@ export default function PostsPage() {
       const data = await res.json();
       const allPosts: Post[] = data.posts || [];
 
-      const userPosts = allPosts.filter(p => p.author_type === 'user');
-      const aiPosts = allPosts.filter(p => p.author_type === 'ai');
-      const uniqueUsers = new Set(allPosts.map(p => p.author_id)).size;
+      const userPosts = allPosts.filter((p) => p.author_type === 'user');
+      const aiPosts = allPosts.filter((p) => p.author_type === 'ai');
+      const uniqueUsers = new Set(allPosts.map((p) => p.author_id)).size;
       const aiDensity = allPosts.length > 0 ? aiPosts.length / allPosts.length : 0;
       const spaceState = detectSpaceState(allPosts);
 
       // 各投稿のリアクションを取得
-      const postsWithDetails = await Promise.all(allPosts.map(async (post) => {
-        try {
-          const reactionsRes = await fetch(`/api/reactions?postId=${post.id}`);
-          const reactionsData = await reactionsRes.json();
-          
-          return {
-            ...post,
-            reply_count: allPosts.filter(p => p.thread_id === post.id).length,
-            reactions: reactionsData.reactions || {},
-          };
-        } catch (error) {
-          return {
-            ...post,
-            reply_count: allPosts.filter(p => p.thread_id === post.id).length,
-            reactions: {},
-          };
-        }
-      }));
+      const postsWithDetails = await Promise.all(
+        allPosts.map(async (post) => {
+          try {
+            const reactionsRes = await fetch(`/api/reactions?postId=${post.id}`);
+            const reactionsData = await reactionsRes.json();
+
+            return {
+              ...post,
+              reply_count: allPosts.filter((p) => p.thread_id === post.id).length,
+              reactions: reactionsData.reactions || {},
+            };
+          } catch (error) {
+            return {
+              ...post,
+              reply_count: allPosts.filter((p) => p.thread_id === post.id).length,
+              reactions: {},
+            };
+          }
+        })
+      );
 
       setPosts(postsWithDetails);
       setStats({
@@ -97,57 +99,57 @@ export default function PostsPage() {
     }
   };
 
-  const filteredPosts = posts.filter(post => {
+  const filteredPosts = posts.filter((post) => {
     if (filter === 'all') return true;
     return post.author_type === filter;
   });
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin"></div>
+      <div className="min-h-screen mz-paper flex items-center justify-center">
+        <div className="w-8 h-8 border mz-border border-t-gray-900 animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen mz-paper">
       <AdminHeader />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 mt-4 sm:mt-6 mb-8">
-        <div className="bg-white rounded-xl border-2 border-gray-200 shadow-lg p-4 sm:p-6">
-          <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">
+        <div className="mz-surface border mz-border p-4 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-bold mz-ink-sub mb-4 sm:mb-6 flex items-center gap-2">
             <span>📝</span> 投稿ログ
           </h2>
-          
-          <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 sm:p-4 mb-4">
+
+          <div className="mz-surface-sub border mz-border p-3 sm:p-4 mb-4">
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={() => setFilter('all')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all text-sm shadow-sm ${
+                className={`px-4 py-2 font-medium transition-all text-sm  ${
                   filter === 'all'
-                    ? 'bg-gray-900 text-white shadow-md'
-                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    ? 'bg-gray-900  '
+                    : 'mz-surface mz-ink-sub hover:mz-surface-sub border mz-border'
                 }`}
               >
                 すべて ({stats.totalPosts})
               </button>
               <button
                 onClick={() => setFilter('user')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all text-sm shadow-sm ${
+                className={`px-4 py-2 font-medium transition-all text-sm  ${
                   filter === 'user'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-white text-gray-700 hover:bg-blue-50 border border-gray-200'
+                    ? 'mz-bg-accent  '
+                    : 'mz-surface mz-ink-sub hover:mz-bg-accent-weak border mz-border'
                 }`}
               >
                 👤 ユーザー ({stats.userPosts})
               </button>
               <button
                 onClick={() => setFilter('ai')}
-                className={`px-4 py-2 rounded-lg font-medium transition-all text-sm shadow-sm ${
+                className={`px-4 py-2 font-medium transition-all text-sm  ${
                   filter === 'ai'
-                    ? 'bg-indigo-600 text-white shadow-md'
-                    : 'bg-white text-gray-700 hover:bg-indigo-50 border border-gray-200'
+                    ? 'mz-bg-accent  '
+                    : 'mz-surface mz-ink-sub hover:mz-bg-accent-weak border mz-border'
                 }`}
               >
                 🤖 AI ({stats.aiPosts})
@@ -155,45 +157,68 @@ export default function PostsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="mz-surface border mz-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="mz-surface-sub border-b mz-border">
                   <tr>
-                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">タイプ</th>
-                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">投稿者ID</th>
-                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">内容</th>
-                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">リアクション</th>
-                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">スレッド</th>
-                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">返信先</th>
-                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">返信数</th>
-                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">投稿日時</th>
-                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">操作</th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      タイプ
+                    </th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      投稿者ID
+                    </th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      内容
+                    </th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      リアクション
+                    </th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      スレッド
+                    </th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      返信先
+                    </th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      返信数
+                    </th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      投稿日時
+                    </th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      操作
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredPosts.map((post) => {
-                    const replyToPost = post.thread_id ? posts.find(p => p.id === post.thread_id) : null;
-                    
+                    const replyToPost = post.thread_id
+                      ? posts.find((p) => p.id === post.thread_id)
+                      : null;
+
                     // デバッグログ
                     if (post.thread_id && !replyToPost) {
                       console.log('返信先が見つからない:', {
                         postId: post.id,
                         threadId: post.thread_id,
                         content: post.content,
-                        allPostIds: posts.map(p => p.id)
+                        allPostIds: posts.map((p) => p.id),
                       });
                     }
-                    
+
                     return (
-                      <tr key={post.id} className={`hover:bg-gray-50 ${post.thread_id ? 'bg-blue-50/30' : ''}`}>
+                      <tr
+                        key={post.id}
+                        className={`hover:mz-surface-sub ${post.thread_id ? 'mz-bg-accent-weak/30' : ''}`}
+                      >
                         <td className="px-3 sm:px-4 py-2 sm:py-3">
                           {post.author_type === 'ai' ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium mz-bg-accent-weak mz-accent">
                               🤖 AI
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium mz-bg-accent-weak mz-accent">
                               👤 ユーザー
                             </span>
                           )}
@@ -201,43 +226,51 @@ export default function PostsPage() {
                         <td className="px-3 sm:px-4 py-2 sm:py-3">
                           <div className="flex items-center gap-2">
                             <div
-                              className="w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                              className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-xs font-bold flex-shrink-0"
                               style={{ backgroundColor: getUserColor(post.author_id) }}
                             >
                               {post.author_id.slice(-2)}
                             </div>
-                            <span className="text-xs sm:text-sm font-medium text-gray-900 truncate">{post.author_id}</span>
+                            <span className="text-xs sm:text-sm font-medium mz-ink truncate">
+                              {post.author_id}
+                            </span>
                           </div>
                         </td>
                         <td className="px-3 sm:px-4 py-2 sm:py-3">
-                          <p className="text-xs sm:text-sm text-gray-900 line-clamp-2 max-w-md">{post.content}</p>
+                          <p className="text-xs sm:text-sm mz-ink line-clamp-2 max-w-md">
+                            {post.content}
+                          </p>
                         </td>
                         <td className="px-3 sm:px-4 py-2 sm:py-3">
                           {post.reactions && Object.keys(post.reactions).length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {Object.entries(post.reactions).map(([emoji, info]) => (
                                 <div key={emoji} className="group relative">
-                                  <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-full text-xs">
+                                  <div className="flex items-center gap-1 px-2 py-1 mz-surface-sub text-xs">
                                     <span>{emoji}</span>
                                     <span className="font-semibold">{info.count}</span>
                                   </div>
                                   {/* ホバーでユーザー一覧 */}
                                   <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 whitespace-nowrap">
-                                    <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-xl">
+                                    <div className="bg-gray-900 text-xs px-3 py-2 ">
                                       {info.users.slice(0, 5).map((user, idx) => (
                                         <div key={idx} className="flex items-center gap-1.5">
                                           <div
-                                            className="w-2 h-2 rounded-full"
+                                            className="w-2 h-2 "
                                             style={{ backgroundColor: getUserColor(user.id) }}
                                           />
                                           <span>{user.id}</span>
                                           {user.isAI && (
-                                            <span className="text-[10px] bg-indigo-500 px-1.5 py-0.5 rounded-full">🤖</span>
+                                            <span className="text-[10px] bg-indigo-500 px-1.5 py-0.5 ">
+                                              🤖
+                                            </span>
                                           )}
                                         </div>
                                       ))}
                                       {info.users.length > 5 && (
-                                        <div className="text-gray-400 mt-1">他 {info.users.length - 5}人</div>
+                                        <div className="mz-ink-faint mt-1">
+                                          他 {info.users.length - 5}人
+                                        </div>
                                       )}
                                     </div>
                                   </div>
@@ -245,16 +278,16 @@ export default function PostsPage() {
                               ))}
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-400">-</span>
+                            <span className="text-xs mz-ink-faint">-</span>
                           )}
                         </td>
                         <td className="px-3 sm:px-4 py-2 sm:py-3">
                           {post.thread_id ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium mz-bg-accent-weak mz-accent">
                               💬 返信
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium mz-surface-sub mz-ink-sub">
                               📝 投稿
                             </span>
                           )}
@@ -264,37 +297,49 @@ export default function PostsPage() {
                             replyToPost ? (
                               <div className="flex items-center gap-2">
                                 <div
-                                  className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                                  className="w-4 h-4 flex items-center justify-center text-[10px] font-bold flex-shrink-0"
                                   style={{ backgroundColor: getUserColor(replyToPost.author_id) }}
                                 >
                                   {replyToPost.author_id.slice(-2)}
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-xs text-gray-600 truncate max-w-[150px]">{replyToPost.author_id}</p>
-                                  <p className="text-xs text-gray-400 truncate max-w-[150px]">{replyToPost.content}</p>
+                                  <p className="text-xs mz-ink-sub truncate max-w-[150px]">
+                                    {replyToPost.author_id}
+                                  </p>
+                                  <p className="text-xs mz-ink-faint truncate max-w-[150px]">
+                                    {replyToPost.content}
+                                  </p>
                                 </div>
                               </div>
                             ) : (
-                              <div className="text-xs text-gray-500">
-                                <span className="font-mono bg-gray-100 px-2 py-1 rounded">ID: {post.thread_id.slice(0, 8)}...</span>
-                                <p className="text-[10px] text-red-500 mt-1">※投稿が削除された可能性</p>
+                              <div className="text-xs mz-ink-faint">
+                                <span className="font-mono mz-surface-sub px-2 py-1 ">
+                                  ID: {post.thread_id.slice(0, 8)}...
+                                </span>
+                                <p className="text-[10px] text-red-500 mt-1">
+                                  ※投稿が削除された可能性
+                                </p>
                               </div>
                             )
                           ) : (
-                            <span className="text-xs text-gray-400">-</span>
+                            <span className="text-xs mz-ink-faint">-</span>
                           )}
                         </td>
                         <td className="px-3 sm:px-4 py-2 sm:py-3">
-                          <span className="text-xs sm:text-sm text-gray-600">{post.reply_count || 0}</span>
+                          <span className="text-xs sm:text-sm mz-ink-sub">
+                            {post.reply_count || 0}
+                          </span>
                         </td>
                         <td className="px-3 sm:px-4 py-2 sm:py-3">
-                          <div className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">{formatTime(post.created_at)}</div>
+                          <div className="text-xs sm:text-sm mz-ink-sub whitespace-nowrap">
+                            {formatTime(post.created_at)}
+                          </div>
                         </td>
                         <td className="px-3 sm:px-4 py-2 sm:py-3">
                           {post.author_type === 'ai' && (
                             <button
                               onClick={() => handleDelete(post.id)}
-                              className="text-xs px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg transition-colors font-medium"
+                              className="text-xs px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 transition-colors font-medium"
                             >
                               削除
                             </button>
@@ -308,7 +353,7 @@ export default function PostsPage() {
             </div>
 
             {filteredPosts.length === 0 && (
-              <div className="text-center py-12 text-gray-400 text-sm">投稿がありません</div>
+              <div className="text-center py-12 mz-ink-faint text-sm">投稿がありません</div>
             )}
           </div>
         </div>

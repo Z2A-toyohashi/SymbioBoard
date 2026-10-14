@@ -3,67 +3,65 @@
 /*
   まざりば のデザイン
   ------------------------------------------------------------
-  下敷きは2ちゃんねる的な掲示板の作法（細い罫線、レス番号、名前の色分け、
-  情報密度の高い一覧）。そこに令和の質感を重ねる。
+  下敷きは2ちゃんねる的な掲示板（細い罫線、レス番号、名前の色分け、高い情報密度）。
+  そこに重ねるのは「今どきのアプリ」ではなく、日本語の印刷物の作法にした。
 
-  素っ気なさと手抜きは紙一重なので、効かせどころを決めてある。
-  ・背景は無地のグレーではなく、わずかに粒子のある紙
-  ・面は必ず背景から浮かせる（細い線 + 弱い影）
-  ::  アクセントは深い緑ひとつ。AIだけ橙で、人と機械を色で分ける
-  ・角丸は小さく（4〜10px）。丸すぎるとSNSの見た目に寄ってしまう
-  ・見出しだけ丸ゴシック。本文は素直なゴシック
+  やらないことを先に決めている。
+  ・グラデーションを使わない（面は必ず単色）
+  ・影を落とさない（奥行きは罫線と余白で出す）
+  ・角を丸めない（最大2px。丸みはそれ自体が「アプリらしさ」になる）
+  ・色数を増やさない（墨・朱・生成りの三色。人は墨、AIは朱）
+  ・意味のない動きを入れない
+
+  やること。
+  ・見出しは明朝、本文はゴシック。日本語の紙面の基本の組み合わせ
+  ・罫線は細く、濃淡を2段だけ持つ
+  ・数字と時刻は等幅。桁が揃うと一覧が読める
 */
 
 :root {
-  --mz-bg: #efeae0;
-  --mz-bg-tint: #e7e0d2;
-  --mz-surface: #fffdf9;
-  --mz-surface-sub: #f7f3ec;
-  --mz-line: #ded5c5;
-  --mz-line-strong: #c6b9a2;
-  --mz-ink: #221f1a;
-  --mz-ink-sub: #6f6758;
-  --mz-ink-faint: #a09683;
-  --mz-accent: #14665a;
-  --mz-accent-deep: #0d4a41;
-  --mz-accent-ink: #ffffff;
-  --mz-accent-weak: #ddeae5;
-  --mz-human: #14665a;
-  --mz-ai: #b8511a;
-  --mz-ai-weak: #fbe9db;
-  --mz-danger: #a8271f;
+  --mz-paper: #f0ece2;
+  --mz-surface: #faf8f3;
+  --mz-surface-sub: #f2eee5;
+  --mz-line: #d9d2c2;
+  --mz-line-strong: #2a271f;
+  --mz-ink: #17150f;
+  --mz-ink-sub: #5f594b;
+  --mz-ink-faint: #918a79;
 
-  --mz-shadow-sm: 0 1px 2px rgba(60, 48, 30, 0.07);
-  --mz-shadow: 0 2px 6px rgba(60, 48, 30, 0.09), 0 1px 2px rgba(60, 48, 30, 0.06);
-  --mz-shadow-lg: 0 10px 28px rgba(60, 48, 30, 0.16), 0 2px 6px rgba(60, 48, 30, 0.08);
+  /* 朱。AIと、押せるものにだけ使う */
+  --mz-accent: #b23a1c;
+  --mz-accent-ink: #faf8f3;
+  --mz-accent-weak: #f2e3dc;
 
-  --font-display: var(--font-zen-maru), 'Hiragino Maru Gothic ProN', sans-serif;
-  --font-body: var(--font-zen-kaku), 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', sans-serif;
+  --mz-human: #17150f;
+  --mz-ai: #b23a1c;
+  --mz-ai-weak: #f2e3dc;
+  --mz-danger: #93261a;
+
+  --font-display: var(--font-display-jp), 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+  --font-body: var(--font-body-jp), 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --mz-bg: #15140f;
-    --mz-bg-tint: #100f0b;
-    --mz-surface: #211f18;
-    --mz-surface-sub: #1a1813;
-    --mz-line: #353226;
-    --mz-line-strong: #4e4a39;
-    --mz-ink: #efeade;
-    --mz-ink-sub: #a79f8d;
-    --mz-ink-faint: #7b7462;
-    --mz-accent: #5ec0a5;
-    --mz-accent-deep: #8ad8c1;
-    --mz-accent-ink: #0d241e;
-    --mz-accent-weak: #1b3029;
-    --mz-human: #5ec0a5;
-    --mz-ai: #ea9459;
-    --mz-ai-weak: #332518;
-    --mz-danger: #e4766c;
+    --mz-paper: #14130f;
+    --mz-surface: #1b1a15;
+    --mz-surface-sub: #211f19;
+    --mz-line: #37342a;
+    --mz-line-strong: #6c6655;
+    --mz-ink: #ece7d9;
+    --mz-ink-sub: #a09884;
+    --mz-ink-faint: #736c5c;
 
-    --mz-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-    --mz-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-    --mz-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+    --mz-accent: #d9623f;
+    --mz-accent-ink: #14130f;
+    --mz-accent-weak: #2e201a;
+
+    --mz-human: #ece7d9;
+    --mz-ai: #d9623f;
+    --mz-ai-weak: #2e201a;
+    --mz-danger: #d9655a;
   }
 }
 
@@ -78,19 +76,7 @@ html {
 }
 
 body {
-  background-color: var(--mz-bg);
-  /* 紙の粒。無地のベタ塗りだと画面が安っぽく見えるので、ごく薄く乗せる */
-  background-image:
-    radial-gradient(circle at 15% 12%, rgba(255, 255, 255, 0.55), transparent 42%),
-    radial-gradient(circle at 85% 0%, var(--mz-bg-tint), transparent 55%),
-    repeating-linear-gradient(
-      0deg,
-      rgba(120, 100, 70, 0.016) 0px,
-      rgba(120, 100, 70, 0.016) 1px,
-      transparent 1px,
-      transparent 3px
-    );
-  background-attachment: fixed;
+  background-color: var(--mz-paper);
   color: var(--mz-ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
@@ -102,7 +88,7 @@ h1,
 h2,
 h3 {
   font-family: var(--font-display);
-  letter-spacing: 0.01em;
+  font-weight: 700;
 }
 
 @layer utilities {
@@ -114,6 +100,9 @@ h3 {
   }
   .mz-surface-sub {
     background: var(--mz-surface-sub);
+  }
+  .mz-paper {
+    background: var(--mz-paper);
   }
   .mz-ink {
     color: var(--mz-ink);
@@ -134,7 +123,7 @@ h3 {
     color: var(--mz-accent);
   }
   .mz-bg-accent {
-    background: linear-gradient(180deg, var(--mz-accent), var(--mz-accent-deep));
+    background: var(--mz-accent);
     color: var(--mz-accent-ink);
   }
   .mz-bg-accent-weak {
@@ -150,67 +139,41 @@ h3 {
     background: var(--mz-ai-weak);
   }
 
-  /* 面を背景から浮かせる。線だけだと平板に見える */
+  /* 面。影は使わず、太い罫線で紙面を区切る */
   .mz-card {
     background: var(--mz-surface);
-    border: 1px solid var(--mz-line);
-    border-radius: 10px;
-    box-shadow: var(--mz-shadow);
-  }
-  .mz-raise {
-    box-shadow: var(--mz-shadow);
-  }
-  .mz-raise-lg {
-    box-shadow: var(--mz-shadow-lg);
+    border: 1px solid var(--mz-line-strong);
   }
 
-  /* レス番号・時刻・IDに使う等幅 */
+  /* 数字・時刻・IDに使う等幅 */
   .mz-mono {
     font-family: 'SF Mono', 'Menlo', 'Consolas', 'Noto Sans Mono', ui-monospace, monospace;
     font-feature-settings: 'tnum' 1;
     letter-spacing: -0.01em;
   }
 
-  /* 見出し脇の小さな罫。2ちゃんねるの区切り線を今の密度に置き換えたもの */
-  .mz-rule::after {
-    content: '';
-    display: block;
+  /* 見出し脇の罫。紙面の区切り */
+  .mz-rule {
     height: 1px;
-    flex: 1;
-    background: linear-gradient(90deg, var(--mz-line-strong), transparent);
+    background: var(--mz-line-strong);
+    opacity: 0.35;
   }
 
   .mz-safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
+  /* 動きは開閉だけ。それ以外は動かさない */
   .animate-fade-in {
-    animation: mzFadeIn 0.28s cubic-bezier(0.22, 0.8, 0.3, 1);
-  }
-
-  /* AIが出てきそうな時だけ脈打たせる。常時動かすと視界の邪魔になる */
-  .animate-breathe {
-    animation: mzBreathe 2.6s ease-in-out infinite;
+    animation: mzFadeIn 0.18s ease-out;
   }
 
   @keyframes mzFadeIn {
     from {
       opacity: 0;
-      transform: translateY(6px);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes mzBreathe {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.45;
     }
   }
 }
@@ -221,6 +184,7 @@ select {
   background: var(--mz-surface);
   color: var(--mz-ink);
   font-family: inherit;
+  border-radius: 0;
 }
 
 input::placeholder,
@@ -231,17 +195,20 @@ textarea::placeholder {
 input:focus,
 textarea:focus {
   border-color: var(--mz-accent);
-  box-shadow: 0 0 0 3px var(--mz-accent-weak);
+  outline: none;
 }
 
-/* スライダーもアクセント色に揃える */
 input[type='range'] {
   accent-color: var(--mz-accent);
 }
 input[type='checkbox'] {
   accent-color: var(--mz-accent);
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
+}
+
+button {
+  border-radius: 0;
 }
 
 /* スマホで入力欄にフォーカスした時、iOSが勝手に拡大するのを防ぐ */

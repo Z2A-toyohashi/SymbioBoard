@@ -20,10 +20,7 @@ export default function AdminPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [postsRes, usersRes] = await Promise.all([
-          fetch('/api/posts'),
-          fetch('/api/users'),
-        ]);
+        const [postsRes, usersRes] = await Promise.all([fetch('/api/posts'), fetch('/api/users')]);
 
         const postsData = await postsRes.json();
         const allPosts = postsData.posts || [];
@@ -47,7 +44,7 @@ export default function AdminPage() {
     <div className="min-h-screen">
       <AdminHeader />
 
-      <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 pb-24 space-y-4">
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-4 pb-24 space-y-4">
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <Stat label="いる人" value={stats.activeHumans} note="直近1時間" />
           <Stat label="のべ人数" value={stats.totalHumans} note="累計" />
@@ -69,7 +66,7 @@ export default function AdminPage() {
 
 function Stat({ label, value, note }: { label: string; value: number | string; note: string }) {
   return (
-    <div className="rounded border mz-border-strong mz-surface px-3 py-2.5">
+    <div className="border mz-border-strong mz-surface px-3 py-2.5">
       <p className="text-[11px] mz-ink-sub">{label}</p>
       <p className="mz-mono text-xl font-bold mz-ink mt-0.5">{value}</p>
       <p className="text-[10px] mz-ink-faint mt-0.5">{note}</p>

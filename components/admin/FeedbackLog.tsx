@@ -15,33 +15,27 @@ interface FeedbackLogProps {
 
 export default function FeedbackLog({ feedback }: FeedbackLogProps) {
   return (
-    <div className="bg-white rounded-xl border-2 border-indigo-200 shadow-lg p-4 sm:p-6">
-      <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">
+    <div className="mz-surface border mz-border p-4 sm:p-6">
+      <h2 className="text-lg sm:text-xl font-bold mz-ink-sub mb-4 sm:mb-6 flex items-center gap-2">
         <span>💬</span> フィードバック一覧
       </h2>
 
       <div className="space-y-4">
         {feedback.length === 0 ? (
-          <div className="text-center py-12 text-gray-400 text-sm">
+          <div className="text-center py-12 mz-ink-faint text-sm">
             フィードバックがまだありません
           </div>
         ) : (
           feedback.map((item) => (
             <div
               key={item.id}
-              className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-4 shadow-sm"
+              className="mz-surface-sub border mz-border p-4 "
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-indigo-600">
-                  ID: {item.user_id}
-                </span>
-                <span className="text-xs text-gray-500">
-                  {formatTime(item.created_at)}
-                </span>
+                <span className="text-xs font-semibold mz-accent">ID: {item.user_id}</span>
+                <span className="text-xs mz-ink-faint">{formatTime(item.created_at)}</span>
               </div>
-              <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
-                {item.content}
-              </p>
+              <p className="text-sm mz-ink-sub whitespace-pre-wrap break-words">{item.content}</p>
             </div>
           ))
         )}

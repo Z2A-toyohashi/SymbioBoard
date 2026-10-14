@@ -1,20 +1,21 @@
 import type { Metadata } from "next";
-import { Zen_Kaku_Gothic_New, Zen_Maru_Gothic } from "next/font/google";
+import { Zen_Kaku_Gothic_New, Shippori_Mincho_B1 } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 
 // 本文。字面が素直で、掲示板の細かい行でも潰れない。
-const zenKaku = Zen_Kaku_Gothic_New({
-  variable: "--font-zen-kaku",
-  weight: ["400", "500", "700", "900"],
+const bodyFont = Zen_Kaku_Gothic_New({
+  variable: "--font-body-jp",
+  weight: ["400", "500", "700"],
   subsets: ["latin"],
   display: "swap",
 });
 
-// 見出しとロゴ。角が丸いぶん、2ちゃんねる的な素っ気なさに今の体温を足せる。
-const zenMaru = Zen_Maru_Gothic({
-  variable: "--font-zen-maru",
-  weight: ["500", "700", "900"],
+// 見出しとロゴ。丸ゴシックだと今どきのアプリに寄りすぎるので明朝にした。
+// 日本語の印刷物の見出しは明朝が基本で、掲示板の素っ気なさとも噛み合う。
+const displayFont = Shippori_Mincho_B1({
+  variable: "--font-display-jp",
+  weight: ["500", "700", "800"],
   subsets: ["latin"],
   display: "swap",
 });
@@ -46,7 +47,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className={`${zenKaku.variable} ${zenMaru.variable} antialiased`}>
+      <body className={`${bodyFont.variable} ${displayFont.variable} antialiased`}>
         {children}
       </body>
     </html>

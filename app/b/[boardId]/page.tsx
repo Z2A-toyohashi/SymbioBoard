@@ -183,7 +183,7 @@ export default function BoardPage() {
       <SiteHeader userId={userId} boardTitle={board?.title || '…'} backHref="/" />
       <AIMeter posts={posts} />
 
-      <main className="max-w-5xl mx-auto px-0 sm:px-4 py-0 sm:py-4 pb-36">
+      <main className="max-w-4xl mx-auto px-0 sm:px-4 py-0 sm:py-4 pb-36">
         {board?.description && (
           <p className="px-3.5 sm:px-4 py-2.5 text-[12px] mz-ink-sub sm:mb-3 sm:mz-card border-b sm:border-b mz-border">
             {board.description}

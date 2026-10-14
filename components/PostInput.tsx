@@ -69,7 +69,9 @@ export default function PostInput({
         type = 'image';
       } catch (error) {
         console.error('Upload failed:', error);
-        alert(`画像のアップロードに失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+        alert(
+          `画像のアップロードに失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`
+        );
         setIsUploading(false);
         return;
       }
@@ -155,7 +157,9 @@ export default function PostInput({
       }
     } catch (error) {
       console.error('Transcription failed:', error);
-      alert(`音声の文字起こしに失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+      alert(
+        `音声の文字起こしに失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`
+      );
     }
   };
 
@@ -163,40 +167,31 @@ export default function PostInput({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 mz-safe-bottom">
-      {/* 本文との境目をぼかす。固定要素が唐突に居座って見えないように */}
-      <div
-        className="h-5 pointer-events-none"
-        style={{ background: 'linear-gradient(to top, var(--mz-bg), transparent)' }}
-      />
-
-      <div
-        className="border-t mz-border-strong"
-        style={{
-          background: 'color-mix(in srgb, var(--mz-surface) 92%, transparent)',
-          backdropFilter: 'blur(10px)',
-          boxShadow: '0 -4px 20px rgba(60,48,30,0.10)',
-        }}
-      >
-        <div className="max-w-5xl mx-auto px-2.5 sm:px-4">
+      <div className="border-t-2 mz-border-strong mz-surface">
+        <div className="max-w-4xl mx-auto px-2.5 sm:px-4">
           {replyTo && replyToPost && (
             <div className="flex items-center gap-2 py-2 border-b mz-border text-[12px] animate-fade-in">
               <span
-                className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold"
-                style={{ background: 'var(--mz-accent-weak)', color: 'var(--mz-accent)' }}
+                className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold border"
+                style={{ color: 'var(--mz-accent)', borderColor: 'var(--mz-accent)' }}
               >
                 返信先
               </span>
               <span
                 className="font-bold shrink-0"
-                style={{ color: replyToPost.author_type === 'ai' ? 'var(--mz-ai)' : 'var(--mz-human)' }}
+                style={{
+                  color: replyToPost.author_type === 'ai' ? 'var(--mz-ai)' : 'var(--mz-human)',
+                }}
               >
-                {replyToPost.author_type === 'ai' ? aiNames[replyToPost.author_id] || 'AI' : '名無し'}
+                {replyToPost.author_type === 'ai'
+                  ? aiNames[replyToPost.author_id] || 'AI'
+                  : '名無し'}
               </span>
               <span className="mz-ink-sub truncate flex-1 min-w-0">{replyToPost.content}</span>
               {onCancel && (
                 <button
                   onClick={onCancel}
-                  className="shrink-0 w-6 h-6 rounded-full border mz-border mz-ink-faint"
+                  className="shrink-0 w-6 h-6 border mz-border mz-ink-faint"
                   aria-label="返信をやめる"
                 >
                   ✕
@@ -208,18 +203,14 @@ export default function PostInput({
           {imagePreview && (
             <div className="pt-2 relative inline-block animate-fade-in">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imagePreview}
-                alt="プレビュー"
-                className="max-h-28 rounded-lg border mz-border mz-raise"
-              />
+              <img src={imagePreview} alt="プレビュー" className="max-h-28 border mz-border" />
               <button
                 onClick={() => {
                   setImagePreview(null);
                   setImageFile(null);
                   if (fileInputRef.current) fileInputRef.current.value = '';
                 }}
-                className="absolute top-3 right-1 w-6 h-6 rounded-full bg-black/70 text-white text-xs"
+                className="absolute top-3 right-1 w-6 h-6 bg-black/70 text-white text-xs"
               >
                 ✕
               </button>
@@ -233,8 +224,8 @@ export default function PostInput({
               onMouseLeave={stopRecording}
               onTouchStart={startRecording}
               onTouchEnd={stopRecording}
-              className={`shrink-0 w-10 h-10 rounded-xl border grid place-items-center text-[15px] transition-all ${
-                isRecording ? 'animate-breathe scale-110' : ''
+              className={`shrink-0 w-10 h-10 border grid place-items-center text-[15px] transition-all ${
+                isRecording ? 'opacity-80' : ''
               }`}
               style={
                 isRecording
@@ -249,7 +240,7 @@ export default function PostInput({
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="shrink-0 w-10 h-10 rounded-xl border mz-border-strong mz-ink-sub grid place-items-center text-[15px] hover:mz-bg-accent-weak transition-colors"
+              className="shrink-0 w-10 h-10 border mz-border-strong mz-ink-sub grid place-items-center text-[15px] hover:mz-bg-accent-weak transition-colors"
               title="画像を選ぶ"
               aria-label="画像を添付"
             >
@@ -270,13 +261,13 @@ export default function PostInput({
               onFocus={() => setExpanded(true)}
               placeholder={replyTo ? '返信を書く' : placeholder}
               rows={expanded ? 3 : 1}
-              className="flex-1 min-w-0 resize-none rounded-xl border mz-border-strong px-3.5 py-2.5 text-[15px] leading-relaxed focus:outline-none transition-all"
+              className="flex-1 min-w-0 resize-none border mz-border-strong px-3.5 py-2.5 text-[15px] leading-relaxed focus:outline-none transition-all"
             />
 
             <button
               onClick={handleSubmit}
               disabled={!canSend}
-              className="shrink-0 h-10 px-5 rounded-xl mz-bg-accent font-bold text-[14px] disabled:opacity-35 mz-raise transition-all"
+              className="shrink-0 h-10 px-5 mz-bg-accent font-bold text-[14px] disabled:opacity-35 transition-all"
             >
               {isUploading ? '送信中' : '書く'}
             </button>

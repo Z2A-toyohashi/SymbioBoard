@@ -196,7 +196,7 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
             value={settings.system_prompt}
             onChange={(e) => update('system_prompt', e.target.value)}
             rows={6}
-            className="w-full rounded border mz-border-strong px-3 py-2 text-[13px] focus:outline-none"
+            className="w-full border mz-border-strong px-3 py-2 text-[13px] focus:outline-none"
           />
         </label>
       </Section>
@@ -205,13 +205,17 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
         <button
           onClick={save}
           disabled={saving}
-          className="px-5 py-2 rounded font-bold text-[14px] disabled:opacity-40"
+          className="px-5 py-2 font-bold text-[14px] disabled:opacity-40"
           style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
         >
           {saving ? '保存中…' : '保存する'}
         </button>
         {saved && <span className="text-[12px] mz-accent">保存しました</span>}
-        {error && <span className="text-[12px]" style={{ color: 'var(--mz-danger)' }}>{error}</span>}
+        {error && (
+          <span className="text-[12px]" style={{ color: 'var(--mz-danger)' }}>
+            {error}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -227,7 +231,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded border mz-border-strong mz-surface p-4">
+    <section className="border mz-border-strong mz-surface p-4">
       <h3 className="font-bold mz-ink text-[15px]">{title}</h3>
       {note && <p className="text-[11px] mz-ink-sub mt-1 mb-3 leading-relaxed">{note}</p>}
       {children}
@@ -249,7 +253,7 @@ function Slider({
   max?: number;
 }) {
   return (
-    <label className="block rounded border mz-border p-3">
+    <label className="block border mz-border p-3">
       <div className="flex items-baseline justify-between">
         <span className="text-[12px] font-bold mz-ink">{label}</span>
         <span className="mz-mono text-[13px] mz-accent">
@@ -288,7 +292,7 @@ function Number({
   suffix?: string;
 }) {
   return (
-    <label className="block rounded border mz-border p-3">
+    <label className="block border mz-border p-3">
       <span className="text-[12px] font-bold mz-ink">{label}</span>
       {hint && <p className="text-[10px] mz-ink-faint mt-0.5">{hint}</p>}
       <div className="flex items-baseline gap-2 mt-2">
@@ -298,7 +302,7 @@ function Number({
           min={min}
           max={max}
           onChange={(e) => onChange(parseInt(e.target.value, 10) || min)}
-          className="w-20 rounded border mz-border-strong px-2 py-1 mz-mono text-[14px] focus:outline-none"
+          className="w-20 border mz-border-strong px-2 py-1 mz-mono text-[14px] focus:outline-none"
         />
         {suffix && <span className="text-[11px] mz-ink-faint">{suffix}</span>}
       </div>

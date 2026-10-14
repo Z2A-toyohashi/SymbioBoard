@@ -37,7 +37,7 @@ export default function BoardAdmin() {
   };
 
   return (
-    <section className="rounded border mz-border-strong mz-surface p-4">
+    <section className="border mz-border-strong mz-surface p-4">
       <div className="flex items-center gap-2 mb-3">
         <h3 className="font-bold mz-ink text-[15px]">板</h3>
         <span className="mz-mono text-[12px] mz-ink-sub">{boards.length}板</span>
@@ -46,7 +46,7 @@ export default function BoardAdmin() {
       {loading ? (
         <p className="py-6 text-center mz-ink-faint text-sm">読み込み中…</p>
       ) : (
-        <div className="rounded border mz-border overflow-hidden">
+        <div className="border mz-border overflow-hidden">
           {boards.map((b) => (
             <div
               key={b.id}
@@ -56,10 +56,11 @@ export default function BoardAdmin() {
                 {b.title}
               </Link>
               {b.is_default && (
-                <span className="text-[10px] px-1 rounded mz-bg-accent-weak mz-accent font-bold">既定</span>
+                <span className="text-[10px] px-1 mz-bg-accent-weak mz-accent font-bold">既定</span>
               )}
               <span className="mz-mono text-[11px] mz-ink-faint">
-                スレ{b.thread_count} / レス{b.post_count} / 人{b.participants.filter((p) => p.type === 'user').length} / AI
+                スレ{b.thread_count} / レス{b.post_count} / 人
+                {b.participants.filter((p) => p.type === 'user').length} / AI
                 {b.participants.filter((p) => p.type === 'ai').length}
               </span>
               <span className="mz-mono text-[11px] mz-ink-faint ml-auto">

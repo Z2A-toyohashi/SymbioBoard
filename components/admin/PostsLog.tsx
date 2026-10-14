@@ -22,45 +22,45 @@ interface PostsLogProps {
 }
 
 export default function PostsLog({ posts, filter, setFilter, stats }: PostsLogProps) {
-  const filteredPosts = posts.filter(post => {
+  const filteredPosts = posts.filter((post) => {
     if (filter === 'all') return true;
     return post.author_type === filter;
   });
 
   return (
-    <div className="bg-white rounded-xl border-2 border-gray-200 shadow-lg p-4 sm:p-6">
-      <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 sm:mb-6 flex items-center gap-2">
+    <div className="mz-surface border mz-border p-4 sm:p-6">
+      <h2 className="text-lg sm:text-xl font-bold mz-ink-sub mb-4 sm:mb-6 flex items-center gap-2">
         <span>📝</span> 投稿ログ
       </h2>
-      
-      <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 sm:p-4 mb-4">
+
+      <div className="mz-surface-sub border mz-border p-3 sm:p-4 mb-4">
         <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={() => setFilter('all')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all text-sm shadow-sm ${
+            className={`px-4 py-2 font-medium transition-all text-sm  ${
               filter === 'all'
-                ? 'bg-gray-900 text-white shadow-md'
-                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                ? 'bg-gray-900  '
+                : 'mz-surface mz-ink-sub hover:mz-surface-sub border mz-border'
             }`}
           >
             すべて ({stats.totalPosts})
           </button>
           <button
             onClick={() => setFilter('user')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all text-sm shadow-sm ${
+            className={`px-4 py-2 font-medium transition-all text-sm  ${
               filter === 'user'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-white text-gray-700 hover:bg-blue-50 border border-gray-200'
+                ? 'mz-bg-accent  '
+                : 'mz-surface mz-ink-sub hover:mz-bg-accent-weak border mz-border'
             }`}
           >
             👤 ユーザー ({stats.userPosts})
           </button>
           <button
             onClick={() => setFilter('ai')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all text-sm shadow-sm ${
+            className={`px-4 py-2 font-medium transition-all text-sm  ${
               filter === 'ai'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-white text-gray-700 hover:bg-indigo-50 border border-gray-200'
+                ? 'mz-bg-accent  '
+                : 'mz-surface mz-ink-sub hover:mz-bg-accent-weak border mz-border'
             }`}
           >
             🤖 AI ({stats.aiPosts})
@@ -68,28 +68,38 @@ export default function PostsLog({ posts, filter, setFilter, stats }: PostsLogPr
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="mz-surface border mz-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="mz-surface-sub border-b mz-border">
               <tr>
-                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">タイプ</th>
-                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">投稿者ID</th>
-                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">内容</th>
-                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">返信数</th>
-                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold text-gray-600">投稿日時</th>
+                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                  タイプ
+                </th>
+                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                  投稿者ID
+                </th>
+                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                  内容
+                </th>
+                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                  返信数
+                </th>
+                <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                  投稿日時
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredPosts.map((post) => (
-                <tr key={post.id} className="hover:bg-gray-50">
+                <tr key={post.id} className="hover:mz-surface-sub">
                   <td className="px-3 sm:px-4 py-2 sm:py-3">
                     {post.author_type === 'ai' ? (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">
+                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium mz-bg-accent-weak mz-accent">
                         🤖 AI
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium mz-bg-accent-weak mz-accent">
                         👤 ユーザー
                       </span>
                     )}
@@ -97,22 +107,28 @@ export default function PostsLog({ posts, filter, setFilter, stats }: PostsLogPr
                   <td className="px-3 sm:px-4 py-2 sm:py-3">
                     <div className="flex items-center gap-2">
                       <div
-                        className="w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                        className="w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center text-xs font-bold flex-shrink-0"
                         style={{ backgroundColor: getUserColor(post.author_id) }}
                       >
                         {post.author_id.slice(-2)}
                       </div>
-                      <span className="text-xs sm:text-sm font-medium text-gray-900 truncate">{post.author_id}</span>
+                      <span className="text-xs sm:text-sm font-medium mz-ink truncate">
+                        {post.author_id}
+                      </span>
                     </div>
                   </td>
                   <td className="px-3 sm:px-4 py-2 sm:py-3">
-                    <p className="text-xs sm:text-sm text-gray-900 line-clamp-2 max-w-md">{post.content}</p>
+                    <p className="text-xs sm:text-sm mz-ink line-clamp-2 max-w-md">
+                      {post.content}
+                    </p>
                   </td>
                   <td className="px-3 sm:px-4 py-2 sm:py-3">
-                    <span className="text-xs sm:text-sm text-gray-600">{post.reply_count || 0}</span>
+                    <span className="text-xs sm:text-sm mz-ink-sub">{post.reply_count || 0}</span>
                   </td>
                   <td className="px-3 sm:px-4 py-2 sm:py-3">
-                    <div className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">{formatTime(post.created_at)}</div>
+                    <div className="text-xs sm:text-sm mz-ink-sub whitespace-nowrap">
+                      {formatTime(post.created_at)}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -121,7 +137,7 @@ export default function PostsLog({ posts, filter, setFilter, stats }: PostsLogPr
         </div>
 
         {filteredPosts.length === 0 && (
-          <div className="text-center py-12 text-gray-400 text-sm">投稿がありません</div>
+          <div className="text-center py-12 mz-ink-faint text-sm">投稿がありません</div>
         )}
       </div>
     </div>

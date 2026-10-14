@@ -84,17 +84,18 @@ export default function SettingsPage() {
       <SiteHeader userId={userId} boardTitle="設定・引き継ぎ" backHref="/" />
 
       <main className="max-w-2xl mx-auto px-3 sm:px-4 py-4 pb-24 space-y-4">
-        <section className="rounded border mz-border-strong mz-surface p-4">
+        <section className="border mz-border-strong mz-surface p-4">
           <h2 className="font-bold mz-ink text-[15px] mb-1">このブラウザのあなた</h2>
           <p className="text-[12px] mz-ink-sub mb-3">
-            表示される名前は常に「名無し」です。書き込みの横に出る ID だけが、同じ人かどうかの手がかりになります。
+            表示される名前は常に「名無し」です。書き込みの横に出る ID
+            だけが、同じ人かどうかの手がかりになります。
           </p>
-          <div className="mz-mono text-lg mz-ink px-3 py-2 rounded mz-surface-sub border mz-border inline-block">
+          <div className="mz-mono text-lg mz-ink px-3 py-2 mz-surface-sub border mz-border inline-block">
             ID:{userId.slice(-4)}
           </div>
         </section>
 
-        <section className="rounded border mz-border-strong mz-surface p-4">
+        <section className="border mz-border-strong mz-surface p-4">
           <h2 className="font-bold mz-ink text-[15px] mb-1">引き継ぎコード</h2>
           <p className="text-[12px] mz-ink-sub mb-3">
             パソコンとスマホで同じあなたとして書き込むためのコードです。
@@ -104,21 +105,21 @@ export default function SettingsPage() {
 
           <div className="flex items-center gap-2 flex-wrap">
             <code
-              className="mz-mono text-[15px] px-3 py-2 rounded border mz-border mz-surface-sub tracking-widest"
+              className="mz-mono text-[15px] px-3 py-2 border mz-border mz-surface-sub tracking-widest"
               style={{ filter: codeVisible ? 'none' : 'blur(5px)' }}
             >
               {code || '発行中…'}
             </code>
             <button
               onClick={() => setCodeVisible((v) => !v)}
-              className="px-3 py-2 rounded border mz-border-strong text-[12px] mz-ink-sub"
+              className="px-3 py-2 border mz-border-strong text-[12px] mz-ink-sub"
             >
               {codeVisible ? '隠す' : '表示する'}
             </button>
             <button
               onClick={copyCode}
               disabled={!code}
-              className="px-3 py-2 rounded text-[12px] font-bold disabled:opacity-40"
+              className="px-3 py-2 text-[12px] font-bold disabled:opacity-40"
               style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
             >
               {copied ? 'コピーしました' : 'コピー'}
@@ -126,7 +127,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="rounded border mz-border-strong mz-surface p-4">
+        <section className="border mz-border-strong mz-surface p-4">
           <h2 className="font-bold mz-ink text-[15px] mb-1">別のブラウザから引き継ぐ</h2>
           <p className="text-[12px] mz-ink-sub mb-3">
             元のブラウザで表示したコードを、ここに入力してください。
@@ -138,20 +139,24 @@ export default function SettingsPage() {
               value={input}
               onChange={(e) => setInput(e.target.value.toUpperCase())}
               placeholder="XXXX-XXXX-XXXX"
-              className="mz-mono px-3 py-2 rounded border mz-border-strong tracking-widest focus:outline-none"
+              className="mz-mono px-3 py-2 border mz-border-strong tracking-widest focus:outline-none"
               maxLength={14}
             />
             <button
               onClick={handover}
               disabled={input.trim().length < 12}
-              className="px-4 py-2 rounded font-bold text-[13px] disabled:opacity-40"
+              className="px-4 py-2 font-bold text-[13px] disabled:opacity-40"
               style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
             >
               引き継ぐ
             </button>
           </div>
 
-          {error && <p className="mt-2 text-[12px]" style={{ color: 'var(--mz-danger)' }}>{error}</p>}
+          {error && (
+            <p className="mt-2 text-[12px]" style={{ color: 'var(--mz-danger)' }}>
+              {error}
+            </p>
+          )}
           {message && <p className="mt-2 text-[12px] mz-accent">{message}</p>}
         </section>
 

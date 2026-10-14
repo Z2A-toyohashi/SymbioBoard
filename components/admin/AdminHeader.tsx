@@ -23,7 +23,7 @@ export default function AdminHeader() {
   const Item = ({ label, path }: { label: string; path: string }) => (
     <Link
       href={path}
-      className={`px-3 py-1.5 rounded text-[13px] whitespace-nowrap ${
+      className={`px-3 py-1.5 text-[13px] whitespace-nowrap ${
         pathname === path ? 'mz-bg-accent font-bold' : 'mz-ink-sub border mz-border'
       }`}
     >
@@ -33,7 +33,7 @@ export default function AdminHeader() {
 
   return (
     <header className="sticky top-0 z-30 mz-surface border-b mz-border-strong">
-      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 py-2">
         <div className="flex items-center gap-2 mb-2">
           <h1 className="font-bold mz-ink">まざりば 管理</h1>
           <Link href="/" className="ml-auto text-[12px] mz-ink-sub underline">

@@ -2,8 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import type { Post } from '@/types';
-import { formatTime, getUserColor } from '@/lib/utils';
+import { formatTime } from '@/lib/utils';
 
+/**
+ * レス。
+ *
+ * 丸いアイコンを並べるとチャットアプリの見た目になる。
+ * 2ちゃんねるは名前欄・ID・時刻の一行だけで誰が書いたかを示していて、
+ * 本文に目を向けさせる作りとしてはそちらが正しい。
+ * ここでは人の名前を墨、AIの名前を朱にして、色だけで種別を分けている。
+ */
 interface PostItemProps {
   post: Post;
   replies: Post[];
@@ -33,8 +41,6 @@ export default function PostItem({
   onReactionUpdate,
   aiNames = {},
 }: PostItemProps) {
-  // 2ちゃんねるは返信が畳まれていないので、既定で開く。
-  // 返信が多いスレだけ畳めるようにする。
   const [showReplies, setShowReplies] = useState(replies.length <= 5);
   const [showPicker, setShowPicker] = useState(false);
   const [reactions, setReactions] = useState<ReactionMap>({});
@@ -92,15 +98,15 @@ export default function PostItem({
         onDelete={onDelete}
       />
 
-      <div className="px-3 sm:px-4 pb-2.5 pl-11 sm:pl-12 flex flex-wrap items-center gap-1.5">
+      <div className="px-3 sm:px-4 pb-2 flex flex-wrap items-center gap-1.5">
         {Object.entries(reactions).map(([emoji, info]) => (
           <button
             key={emoji}
             onClick={() => handleReaction(emoji)}
-            className="px-2 py-0.5 rounded-full border text-[12px] transition-all hover:-translate-y-[1px]"
+            className="px-1.5 py-0.5 border text-[12px]"
             style={
               info.userReacted
-                ? { borderColor: 'var(--mz-accent)', background: 'var(--mz-accent-weak)', color: 'var(--mz-accent)' }
+                ? { borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }
                 : { borderColor: 'var(--mz-line)', color: 'var(--mz-ink-sub)' }
             }
             title={info.users
@@ -114,7 +120,7 @@ export default function PostItem({
         <div className="relative">
           <button
             onClick={() => setShowPicker((v) => !v)}
-            className="w-7 h-6 rounded-full border mz-border mz-ink-faint text-[12px] hover:mz-bg-accent-weak transition-colors"
+            className="px-1.5 py-0.5 border mz-border mz-ink-faint text-[12px]"
             aria-label="リアクションを追加"
           >
             ＋
@@ -122,12 +128,12 @@ export default function PostItem({
           {showPicker && (
             <>
               <div className="fixed inset-0 z-20" onClick={() => setShowPicker(false)} />
-              <div className="absolute bottom-full left-0 mb-1.5 z-30 flex gap-0.5 p-1.5 rounded-lg mz-card mz-raise-lg animate-fade-in">
+              <div className="absolute bottom-full left-0 mb-1 z-30 flex gap-0.5 p-1 mz-card animate-fade-in">
                 {EMOJIS.map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => handleReaction(emoji)}
-                    className="w-8 h-8 rounded-md hover:mz-bg-accent-weak text-base transition-colors"
+                    className="w-8 h-8 hover:mz-bg-accent-weak text-base"
                   >
                     {emoji}
                   </button>
@@ -139,10 +145,10 @@ export default function PostItem({
 
         <button
           onClick={() => onReply(post.id)}
-          className="ml-auto px-3 py-1 rounded-lg border text-[12px] font-bold transition-colors hover:mz-bg-accent-weak"
+          className="ml-auto mz-mono text-[12px] px-2 py-0.5 border"
           style={{ borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }}
         >
-          返信する
+          返信
         </button>
       </div>
 
@@ -150,17 +156,14 @@ export default function PostItem({
         <div className="border-t mz-border">
           <button
             onClick={() => setShowReplies((v) => !v)}
-            className="w-full px-3 sm:px-4 py-1.5 text-left text-[12px] mz-ink-sub mz-surface-sub hover:mz-bg-accent-weak transition-colors"
+            className="w-full px-3 sm:px-4 py-1 text-left text-[12px] mz-ink-sub mz-surface-sub"
           >
-            <span className="mz-mono mr-1">{showReplies ? '▼' : '▶'}</span>
-            返信 <b className="mz-mono mz-ink">{replies.length}</b> 件
+            <span className="mz-mono mr-1">{showReplies ? '－' : '＋'}</span>
+            返信 <span className="mz-mono mz-ink">{replies.length}</span> 件
           </button>
 
           {showReplies && (
-            <div
-              className="mz-surface-sub"
-              style={{ boxShadow: 'inset 3px 0 0 var(--mz-accent-weak)' }}
-            >
+            <div className="mz-surface-sub pl-2 sm:pl-3" style={{ borderLeft: '2px solid var(--mz-line)' }}>
               {replies.map((reply, i) => (
                 <div key={reply.id} className="border-t mz-border">
                   <ResBody
@@ -201,67 +204,51 @@ function ResBody({
 }) {
   const isAI = post.author_type === 'ai';
   const name = isAI ? aiNames[post.author_id] || 'AI' : '名無し';
-  const color = isAI ? 'var(--mz-ai)' : getUserColor(post.author_id);
 
   return (
-    <div className="px-3 sm:px-4 pt-3 pb-2 flex gap-2.5">
-      {/* 書き手の印。AIは四角、人は丸。形で種別が分かる */}
-      <span
-        className={`shrink-0 w-7 h-7 grid place-items-center text-[10px] font-bold text-white mz-mono mt-0.5 ${
-          isAI ? 'rounded-md' : 'rounded-full'
-        }`}
-        style={{ background: color }}
-        aria-hidden
-      >
-        {isAI ? 'AI' : post.author_id.slice(-2)}
-      </span>
+    <div className="px-3 sm:px-4 pt-2 pb-1.5">
+      {/* 名前欄。2ちゃんねるの一行をそのまま踏襲する */}
+      <div className="flex items-baseline gap-1.5 flex-wrap text-[12px] leading-5">
+        <span className="mz-mono mz-ink-faint">
+          {replyNumber ? `${number}-${replyNumber}` : number}
+        </span>
+        <span
+          className="font-bold"
+          style={{ color: isAI ? 'var(--mz-ai)' : 'var(--mz-human)' }}
+        >
+          {name}
+        </span>
+        {isOwn && <span className="text-[10px] mz-ink-faint">（自分）</span>}
+        <span className="mz-mono mz-ink-faint">{formatTime(post.created_at)}</span>
+        <span className="mz-mono mz-ink-faint">ID:{post.author_id.slice(-4)}</span>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-1.5 flex-wrap text-[12px] leading-5">
-          <span className="mz-mono font-bold mz-ink-faint">
-            {replyNumber ? `${number}-${replyNumber}` : number}
+        {isOwn && onDelete && (
+          <button
+            onClick={() => {
+              if (confirm('この投稿を削除しますか？')) onDelete(post.id);
+            }}
+            className="ml-auto text-[11px]"
+            style={{ color: 'var(--mz-danger)' }}
+          >
+            削除
+          </button>
+        )}
+      </div>
+
+      <div className="mt-1 pl-1">
+        {parentNumber && (
+          <span className="mz-mono text-[13px] mz-accent mr-1">&gt;&gt;{parentNumber}</span>
+        )}
+        {post.content && (
+          <span className="text-[15px] leading-[1.8] mz-ink whitespace-pre-wrap break-words">
+            {post.content}
           </span>
-          <span className="font-bold" style={{ color }}>
-            {name}
-          </span>
-          {isOwn && (
-            <span className="px-1 rounded text-[10px] mz-bg-accent-weak mz-accent font-bold">自分</span>
-          )}
-          <span className="mz-mono mz-ink-faint">ID:{post.author_id.slice(-4)}</span>
-          <span className="mz-mono mz-ink-faint">{formatTime(post.created_at)}</span>
-
-          {isOwn && onDelete && (
-            <button
-              onClick={() => {
-                if (confirm('この投稿を削除しますか？')) onDelete(post.id);
-              }}
-              className="ml-auto hover:opacity-70"
-              style={{ color: 'var(--mz-danger)' }}
-            >
-              削除
-            </button>
-          )}
-        </div>
-
-        <div className="mt-1">
-          {parentNumber && (
-            <span className="mz-mono text-[13px] mz-accent mr-1 font-bold">&gt;&gt;{parentNumber}</span>
-          )}
-          {post.content && (
-            <span className="text-[15px] leading-[1.75] mz-ink whitespace-pre-wrap break-words">
-              {post.content}
-            </span>
-          )}
-          {post.media_url && (
-            // 投稿画像は外部URL（Supabase Storage）とローカルの両方があるため next/image は使わない
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={post.media_url}
-              alt="添付画像"
-              className="mt-2 max-h-72 rounded-lg border mz-border mz-raise"
-            />
-          )}
-        </div>
+        )}
+        {post.media_url && (
+          // 投稿画像は外部URL（Supabase Storage）とローカルの両方があるため next/image は使わない
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={post.media_url} alt="添付画像" className="mt-1.5 max-h-72 border mz-border" />
+        )}
       </div>
     </div>
   );

@@ -30,7 +30,7 @@ export default function ChatPage() {
   useEffect(() => {
     const id = getUserId();
     setUserId(id);
-    
+
     // ローカルストレージから会話履歴を読み込む
     const saved = localStorage.getItem('chat-history');
     if (saved) {
@@ -88,11 +88,11 @@ export default function ChatPage() {
           method: 'POST',
           body: formData,
         });
-        
+
         if (!res.ok) {
           throw new Error('Upload failed');
         }
-        
+
         const data = await res.json();
         mediaUrl = data.url;
         mediaType = 'image';
@@ -123,7 +123,7 @@ export default function ChatPage() {
 
     setMessages((prev) => [...prev, userMessage]);
     await saveMessageToDatabase(userMessage);
-    
+
     setInput('');
     setImagePreview(null);
     setImageFile(null);
@@ -138,17 +138,17 @@ export default function ChatPage() {
             const msg: any = {
               role: m.role === 'user' ? 'user' : 'assistant',
             };
-            
+
             // 最新メッセージで画像がある場合はbase64を使用
             if (m.id === userMessage.id && imageBase64) {
               msg.content = [
                 { type: 'text', text: m.content || 'この画像について教えてください' },
-                { 
-                  type: 'image_url', 
-                  image_url: { 
-                    url: imageBase64
-                  } 
-                }
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: imageBase64,
+                  },
+                },
               ];
             } else if (m.media_url && m.media_type === 'image') {
               // 過去のメッセージは画像の説明のみ
@@ -156,7 +156,7 @@ export default function ChatPage() {
             } else {
               msg.content = m.content;
             }
-            
+
             return msg;
           }),
         }),
@@ -245,19 +245,21 @@ export default function ChatPage() {
         method: 'POST',
         body: formData,
       });
-      
+
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Transcription failed');
       }
-      
+
       const data = await res.json();
       if (data.text) {
         setInput((prev) => prev + data.text);
       }
     } catch (error) {
       console.error('Transcription failed:', error);
-      alert(`音声の文字起こしに失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+      alert(
+        `音声の文字起こしに失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`
+      );
     }
   };
 
@@ -269,8 +271,8 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex justify-center">
-      <div className="w-full max-w-2xl bg-white min-h-screen shadow-lg flex flex-col">
+    <div className="min-h-screen mz-surface-sub flex justify-center">
+      <div className="w-full max-w-2xl mz-surface min-h-screen flex flex-col">
         <Header userId={userId} title="AIと1on1" />
 
         <main className="flex-1 flex flex-col overflow-hidden">
@@ -280,8 +282,8 @@ export default function ChatPage() {
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
                   <div className="text-6xl mb-4">🤖</div>
-                  <p className="text-gray-400 text-sm">AIと1対1で会話できます</p>
-                  <p className="text-gray-400 text-xs mt-2">何でも話しかけてみてください</p>
+                  <p className="mz-ink-faint text-sm">AIと1対1で会話できます</p>
+                  <p className="mz-ink-faint text-xs mt-2">何でも話しかけてみてください</p>
                 </div>
               </div>
             ) : (
@@ -292,18 +294,14 @@ export default function ChatPage() {
                     className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[80%] px-4 py-3 rounded-2xl shadow-sm ${
+                      className={`max-w-[80%] px-4 py-3   ${
                         message.role === 'user'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-900 border border-gray-200'
+                          ? 'mz-bg-accent '
+                          : 'mz-surface-sub mz-ink border mz-border'
                       }`}
                     >
                       {message.media_url && message.media_type === 'image' && (
-                        <img
-                          src={message.media_url}
-                          alt="送信画像"
-                          className="max-w-full rounded-lg mb-2"
-                        />
+                        <img src={message.media_url} alt="送信画像" className="max-w-full mb-2" />
                       )}
                       {message.content && (
                         <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
@@ -313,11 +311,20 @@ export default function ChatPage() {
                 ))}
                 {isLoading && (
                   <div className="flex justify-start">
-                    <div className="bg-gray-100 border border-gray-200 px-4 py-3 rounded-2xl shadow-sm">
+                    <div className="mz-surface-sub border mz-border px-4 py-3  ">
                       <div className="flex gap-1">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        <div
+                          className="w-2 h-2 bg-gray-400 animate-bounce"
+                          style={{ animationDelay: '0ms' }}
+                        ></div>
+                        <div
+                          className="w-2 h-2 bg-gray-400 animate-bounce"
+                          style={{ animationDelay: '150ms' }}
+                        ></div>
+                        <div
+                          className="w-2 h-2 bg-gray-400 animate-bounce"
+                          style={{ animationDelay: '300ms' }}
+                        ></div>
                       </div>
                     </div>
                   </div>
@@ -328,12 +335,12 @@ export default function ChatPage() {
           </div>
 
           {/* 入力エリア */}
-          <div className="border-t-2 border-gray-200 p-4 bg-gray-50">
+          <div className="border-t-2 mz-border-strong p-4 mz-surface-sub">
             {messages.length > 0 && (
               <div className="mb-3 flex justify-end">
                 <button
                   onClick={clearHistory}
-                  className="text-xs text-gray-500 hover:text-red-600 transition-colors"
+                  className="text-xs mz-ink-faint hover:text-red-600 transition-colors"
                 >
                   🗑️ 履歴をクリア
                 </button>
@@ -342,17 +349,13 @@ export default function ChatPage() {
 
             {imagePreview && (
               <div className="mb-3 relative inline-block">
-                <img
-                  src={imagePreview}
-                  alt="プレビュー"
-                  className="max-h-32 rounded-lg border-2 border-purple-200 shadow-md"
-                />
+                <img src={imagePreview} alt="プレビュー" className="max-h-32 border mz-border " />
                 <button
                   onClick={() => {
                     setImagePreview(null);
                     setImageFile(null);
                   }}
-                  className="absolute top-1 right-1 bg-black bg-opacity-70 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-opacity-90 transition-all text-xs"
+                  className="absolute top-1 right-1 bg-black bg-opacity-70 w-6 h-6 flex items-center justify-center hover:bg-opacity-90 transition-all text-xs"
                 >
                   ✕
                 </button>
@@ -366,7 +369,7 @@ export default function ChatPage() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="メッセージを入力..."
-                  className="w-full resize-none border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  className="w-full resize-none border mz-border px-4 py-3 focus:outline-none focus: focus: text-sm"
                   rows={2}
                 />
                 <div className="flex gap-2 mt-2">
@@ -376,10 +379,10 @@ export default function ChatPage() {
                     onMouseLeave={stopRecording}
                     onTouchStart={startRecording}
                     onTouchEnd={stopRecording}
-                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shadow-sm ${
+                    className={`w-9 h-9 flex items-center justify-center transition-all  ${
                       isRecording
-                        ? 'bg-red-500 text-white shadow-lg scale-110 ring-4 ring-red-200'
-                        : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                        ? 'bg-red-500 scale-110 ring-red-200'
+                        : 'mz-bg-accent-weak mz-accent '
                     }`}
                     title="長押しで録音"
                   >
@@ -390,11 +393,15 @@ export default function ChatPage() {
 
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-9 h-9 rounded-full bg-purple-100 text-purple-600 hover:bg-purple-200 flex items-center justify-center transition-all shadow-sm"
+                    className="w-9 h-9 mz-bg-accent-weak mz-accent hover:bg-purple-200 flex items-center justify-center transition-all "
                     title="画像を選択"
                   >
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                      <path
+                        fillRule="evenodd"
+                        d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   </button>
                   <input
@@ -409,16 +416,15 @@ export default function ChatPage() {
               <button
                 onClick={handleSend}
                 disabled={(!input.trim() && !imageFile) || isLoading || isUploading}
-                className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none h-fit"
+                className="px-6 py-3 mz-bg-accent disabled:opacity-35 disabled:cursor-not-allowed transition-all font-semibold hover: h-fit"
               >
                 {isUploading ? '送信中...' : '送信'}
               </button>
             </div>
-            <p className="text-xs text-gray-400 mt-2">Cmd/Ctrl + Enter で送信</p>
+            <p className="text-xs mz-ink-faint mt-2">Cmd/Ctrl + Enter で送信</p>
           </div>
         </main>
       </div>
     </div>
   );
 }
-
