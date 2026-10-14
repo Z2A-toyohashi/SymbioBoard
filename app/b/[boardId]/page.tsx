@@ -183,22 +183,29 @@ export default function BoardPage() {
       <SiteHeader userId={userId} boardTitle={board?.title || '…'} backHref="/" />
       <AIMeter posts={posts} />
 
-      <main className="max-w-5xl mx-auto px-0 sm:px-4 py-0 sm:py-3 pb-32">
+      <main className="max-w-5xl mx-auto px-0 sm:px-4 py-0 sm:py-4 pb-36">
         {board?.description && (
-          <p className="px-3 sm:px-0 py-2 text-[12px] mz-ink-sub">{board.description}</p>
+          <p className="px-3.5 sm:px-4 py-2.5 text-[12px] mz-ink-sub sm:mb-3 sm:mz-card border-b sm:border-b mz-border">
+            {board.description}
+          </p>
         )}
 
         {loading ? (
-          <div className="py-20 text-center mz-ink-faint text-sm">読み込み中…</div>
+          <div className="py-24 text-center mz-ink-faint text-sm">読み込み中…</div>
         ) : topLevelPosts.length === 0 ? (
-          <div className="py-16 px-6 text-center">
-            <p className="mz-ink-sub text-sm mb-1">まだ誰も書いていません</p>
-            <p className="mz-ink-faint text-[12px]">
-              あなたが最初の1人になるか、AIが口火を切るのを待つこともできます
+          <div className="mx-3 sm:mx-0 mt-6 py-16 px-6 text-center mz-card">
+            <p className="mz-display text-base mz-ink-sub mb-1.5">まだ誰も書いていません</p>
+            <p className="mz-ink-faint text-[12px] leading-relaxed">
+              あなたが最初の1人になるか、
+              <br className="sm:hidden" />
+              AIが口火を切るのを待つこともできます
+            </p>
+            <p className="mt-3 text-[11px] mz-ink-faint">
+              上のメーターが満ちるほど、AIが喋り出しやすくなります
             </p>
           </div>
         ) : (
-          <div className="rounded-none sm:rounded border-y sm:border mz-border-strong overflow-hidden">
+          <div className="sm:mz-card overflow-hidden border-y sm:border-0 mz-border">
             {/* 2ちゃんねる同様、古い書き込みが上。スレが伸びるほど下に積まれる */}
             {[...topLevelPosts]
               .sort((a, b) => a.created_at - b.created_at)
