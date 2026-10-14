@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import type { Post } from '@/types';
 
 /**
@@ -30,6 +30,32 @@ export default function PostInput({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * 投稿欄は画面下に固定なので、本文の末尾がその下に潜り込む。
+   * 高さは返信先の表示や画像の有無、入力欄の行数で変わるため、
+   * 固定値の余白では足りたり余ったりする。実寸を測って本文側に渡す。
+   */
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+
+    const apply = () => {
+      document.documentElement.style.setProperty('--mz-composer-h', `${el.offsetHeight}px`);
+    };
+
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    window.addEventListener('resize', apply);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', apply);
+      document.documentElement.style.removeProperty('--mz-composer-h');
+    };
+  }, []);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -110,7 +136,7 @@ export default function PostInput({
   const canSend = (content.trim().length > 0 || imageFile !== null) && !isUploading;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-30 mz-safe-bottom">
+    <div ref={barRef} className="fixed right-0 bottom-0 left-0 z-30 mz-safe-bottom">
       <div className="mz-chrome mz-border border-t">
         <div className="mx-auto max-w-[1180px] px-4 sm:px-6 lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[260px_minmax(0,1fr)]">
           <div className="hidden lg:block" />

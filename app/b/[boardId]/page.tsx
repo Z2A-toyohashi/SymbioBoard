@@ -186,7 +186,11 @@ export default function BoardPage() {
         <div className="lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[260px_minmax(0,1fr)]">
           <BoardRail currentBoardId={boardId} />
 
-          <main className="pb-40 lg:max-w-[760px]">
+          <main
+            className="lg:max-w-[760px]"
+            // 投稿欄の実寸ぶんを空ける。測れていない間は十分に大きい値で逃げる
+            style={{ paddingBottom: 'calc(var(--mz-composer-h, 140px) + 2rem)' }}
+          >
             {board?.description && (
               <p className="mz-ink-sub mz-border border-b px-4 py-3 text-[13px] leading-relaxed sm:border-b-0 sm:px-0 sm:pt-5 sm:pb-3">
                 {board.description}

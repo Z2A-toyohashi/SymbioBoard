@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { BoardSummary } from '@/types';
 import { getUserId } from '@/lib/user';
-import { coexistenceRate, formatTime } from '@/lib/utils';
+import { coexistenceRate, formatDate, formatTime } from '@/lib/utils';
 import SiteHeader from '@/components/SiteHeader';
 
 export default function BoardListPage() {
@@ -146,6 +146,12 @@ export default function BoardListPage() {
                         )}
                         <span className="mz-mono mz-ink-sub ml-auto shrink-0 text-[11px]">
                           {board.thread_count}スレ / {board.post_count}レス
+                        </span>
+                      </div>
+
+                      <div className="mz-ink-faint mt-0.5 flex items-baseline gap-2 text-[11px]">
+                        <span className="mz-mono shrink-0">
+                          {formatDate(board.created_at)} 開設
                         </span>
                       </div>
 

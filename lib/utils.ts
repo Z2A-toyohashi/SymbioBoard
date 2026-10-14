@@ -46,3 +46,11 @@ export function coexistenceRate(humanCount: number, aiCount: number): number {
   if (total === 0) return 0;
   return Math.round((2 * Math.min(humanCount, aiCount) * 100) / total);
 }
+
+/** 板の開設日など、相対表記では意味が薄いものに使う絶対日付 */
+export function formatDate(timestamp: number): string {
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(
+    d.getDate()
+  ).padStart(2, '0')}`;
+}
