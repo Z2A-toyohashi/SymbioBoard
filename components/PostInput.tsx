@@ -28,11 +28,8 @@ export default function PostInput({
   const [expanded, setExpanded] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -110,57 +107,6 @@ export default function PostInput({
     reader.readAsDataURL(file);
   };
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await transcribeAudio(audioBlob);
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Recording failed:', error);
-      alert('マイクへのアクセスが拒否されました');
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  const transcribeAudio = async (audioBlob: Blob) => {
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'recording.webm');
-    try {
-      const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Transcription failed');
-      }
-      const data = await res.json();
-      if (data.text) {
-        setContent((prev) => prev + data.text);
-        setExpanded(true);
-      }
-    } catch (error) {
-      console.error('Transcription failed:', error);
-      alert(
-        `音声の文字起こしに失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`
-      );
-    }
-  };
-
   const canSend = (content.trim().length > 0 || imageFile !== null) && !isUploading;
 
   return (
@@ -184,7 +130,8 @@ export default function PostInput({
                 {onCancel && (
                   <button
                     onClick={onCancel}
-                    className="shrink-0 w-6 h-6 border mz-border mz-ink-faint"
+                    className="mz-btn mz-btn-sm mz-btn-quiet shrink-0 px-0"
+                    style={{ width: 36, minHeight: 36 }}
                     aria-label="返信をやめる"
                   >
                     ✕
@@ -211,29 +158,6 @@ export default function PostInput({
             )}
 
             <div className="flex items-end gap-2 py-3">
-              <button
-                onMouseDown={startRecording}
-                onMouseUp={stopRecording}
-                onMouseLeave={stopRecording}
-                onTouchStart={startRecording}
-                onTouchEnd={stopRecording}
-                className="mz-btn mz-btn-quiet shrink-0 px-0 text-[17px]"
-                style={
-                  isRecording
-                    ? {
-                        width: 44,
-                        background: 'var(--mz-accent)',
-                        color: 'var(--mz-accent-ink)',
-                        borderColor: 'var(--mz-accent)',
-                      }
-                    : { width: 44 }
-                }
-                title="長押しで録音して文字にする"
-                aria-label="音声入力"
-              >
-                ◉
-              </button>
-
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="mz-btn mz-btn-quiet shrink-0 px-0 text-[17px]"
