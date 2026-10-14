@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import AdminHeader from '@/components/admin/AdminHeader';
 import AISettings from '@/components/admin/AISettings';
 import AIResidents from '@/components/admin/AIResidents';
+import HumanRoster from '@/components/admin/HumanRoster';
 import BoardAdmin from '@/components/admin/BoardAdmin';
 
 /**
@@ -46,8 +47,8 @@ export default function AdminPage() {
 
       <main className="mx-auto max-w-[1180px] space-y-5 px-4 py-6 pb-28 sm:px-6">
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <Stat label="いる人" value={stats.activeHumans} note="直近1時間" />
-          <Stat label="のべ人数" value={stats.totalHumans} note="累計" />
+          <Stat label="いる人" value={stats.activeHumans} note="直近1時間・AI除く" />
+          <Stat label="のべ人数" value={stats.totalHumans} note="累計・AI除く" />
           <Stat label="AI住人" value={stats.totalAI} note="いま住んでいる数" />
           <Stat
             label="AIの発言比率"
@@ -57,6 +58,7 @@ export default function AdminPage() {
         </section>
 
         <AISettings currentAIDensity={aiDensity} />
+        <HumanRoster />
         <AIResidents />
         <BoardAdmin />
       </main>

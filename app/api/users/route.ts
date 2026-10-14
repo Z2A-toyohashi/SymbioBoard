@@ -1,34 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
 
+/**
+ * 参加者の集計。
+ *
+ * users テーブルには人もAIも入っている。投稿には必ず書き手のIDが要るので、
+ * AIが書き込むときもそのIDを users に登録しているため。
+ * そのまま数えるとAIを人間として数えてしまうので、ai_characters にあるIDを
+ * 必ず差し引く。
+ */
 export async function GET() {
   try {
-    // アクティブな人間ユーザー数（1時間以内）
-    const { data: activeUsers, error: activeError } = await supabase
-      .from('users')
-      .select('id', { count: 'exact' })
-      .gte('last_seen', Date.now() - 3600000);
+    const [{ data: allUsers, error: usersError }, { data: aiCharacters, error: aiError }] =
+      await Promise.all([
+        supabase.from('users').select('id, created_at, last_seen'),
+        supabase.from('ai_characters').select('id'),
+      ]);
 
-    if (activeError) throw activeError;
-
-    // 全人間ユーザー数
-    const { data: allUsers, error: allError } = await supabase
-      .from('users')
-      .select('id', { count: 'exact' });
-
-    if (allError) throw allError;
-
-    // AIキャラクター数
-    const { data: aiCharacters, error: aiError } = await supabase
-      .from('ai_characters')
-      .select('id', { count: 'exact' });
-
+    if (usersError) throw usersError;
     if (aiError) throw aiError;
 
+    const aiIds = new Set((aiCharacters || []).map((c) => c.id as string));
+    const humans = (allUsers || []).filter((u) => !aiIds.has(u.id as string));
+
+    const activeSince = Date.now() - 3600000;
+    const activeHumans = humans.filter((u) => (u.last_seen as number) >= activeSince);
+
     return NextResponse.json({
-      activeHumans: activeUsers?.length || 0,
-      totalHumans: allUsers?.length || 0,
+      activeHumans: activeHumans.length,
+      totalHumans: humans.length,
       totalAI: aiCharacters?.length || 0,
+      // 管理画面で一人ひとりを確認できるように、IDそのものを返す。
+      // 画面に出すのは末尾4桁だけだが、同定には全体が要る。
+      humans: humans
+        .map((u) => ({
+          id: u.id as string,
+          created_at: u.created_at as number,
+          last_seen: u.last_seen as number,
+          active: (u.last_seen as number) >= activeSince,
+        }))
+        .sort((a, b) => b.last_seen - a.last_seen),
     });
   } catch (error) {
     console.error('Failed to get user stats:', error);
@@ -49,19 +60,16 @@ export async function POST(request: NextRequest) {
 
     if (existingUser) {
       // 最終アクセス時刻を更新
-      await supabase
-        .from('users')
-        .update({ last_seen: Date.now() })
-        .eq('id', userId);
+      await supabase.from('users').update({ last_seen: Date.now() }).eq('id', userId);
     } else {
       // 新規ユーザーを作成
-      await supabase
-        .from('users')
-        .insert([{
+      await supabase.from('users').insert([
+        {
           id: userId,
           created_at: Date.now(),
           last_seen: Date.now(),
-        }]);
+        },
+      ]);
     }
 
     return NextResponse.json({ success: true, userId });

@@ -33,25 +33,22 @@ export async function POST(request: NextRequest) {
       system_prompt: 'あなたは自然な会話口調で短く返信してください。',
     };
 
-    const aiPosts = posts.filter(p => p.author_type === 'ai');
+    const aiPosts = posts.filter((p) => p.author_type === 'ai');
     const state = detectSpaceState(posts);
-    
+
     // アクティブユーザー数を取得
     const { data: users } = await supabase
       .from('users')
       .select('id')
       .gte('last_seen', Date.now() - 3600000); // 1時間以内にアクティブ
-    
+
     const userCount = users?.length || 1;
 
     // 人数に見合うだけAIを住まわせる（足りなければ増やす）
     await ensureAIPopulation(config, userCount);
 
     // 全AIキャラクターを取得
-    const { data: allAICharacters } = await supabase
-      .from('ai_characters')
-      .select('*')
-      .order('id');
+    const { data: allAICharacters } = await supabase.from('ai_characters').select('*').order('id');
 
     if (!allAICharacters || allAICharacters.length === 0) {
       return NextResponse.json({ shouldPost: false, reason: 'No AI characters available' });
@@ -62,20 +59,23 @@ export async function POST(request: NextRequest) {
 
     // 各AIのクールダウンをチェックして、投稿可能なAIを選択
     const now = Date.now();
-    const eligibleAIs = activeAIs.filter(ai => {
+    const eligibleAIs = activeAIs.filter((ai) => {
       const lastPostTime = ai.last_post_time || 0;
       const postFrequency = ai.post_frequency || 1.0;
-      
+
       // 基本クールダウン時間を計算
-      const baseCooldown = config.cooldown_min + Math.random() * (config.cooldown_max - config.cooldown_min);
-      
+      const baseCooldown =
+        config.cooldown_min + Math.random() * (config.cooldown_max - config.cooldown_min);
+
       // 投稿頻度で調整（頻度が高いほどクールダウンが短い）
       const adjustedCooldown = baseCooldown / postFrequency;
-      
+
       const timeSinceLastPost = now - lastPostTime;
-      
-      console.log(`AI ${ai.id}: last=${lastPostTime}, freq=${postFrequency}, cooldown=${adjustedCooldown}, elapsed=${timeSinceLastPost}`);
-      
+
+      console.log(
+        `AI ${ai.id}: last=${lastPostTime}, freq=${postFrequency}, cooldown=${adjustedCooldown}, elapsed=${timeSinceLastPost}`
+      );
+
       return timeSinceLastPost >= adjustedCooldown;
     });
 
@@ -119,19 +119,19 @@ export async function POST(request: NextRequest) {
       FRAGILE: config.prob_fragile,
       SOLO: config.prob_solo,
     };
-    
+
     const probability = probabilities[state] || 0;
     if (Math.random() >= probability) {
       return NextResponse.json({ shouldPost: false });
     }
 
     const lastPost = posts[0];
-    
+
     // 返信先を決定（より明確な基準で）
     let thread_id = null;
     let targetPost = undefined;
     let shouldReply = false;
-    
+
     if (state === 'SOLO') {
       // SOLOの場合は高確率で返信
       shouldReply = Math.random() < 0.8;
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
       // FLOWの場合はほぼ返信しない（新しい話題を提供）
       shouldReply = Math.random() < 0.1;
     }
-    
+
     if (shouldReply && lastPost) {
       // 返信する場合：lastPostが返信ならルート投稿に、そうでなければlastPostに返信
       thread_id = lastPost.thread_id || lastPost.id;
@@ -155,23 +155,26 @@ export async function POST(request: NextRequest) {
 
     // ニュース取得チェック（新規投稿時のみ、画像生成より優先）
     let generatedImageUrl: string | undefined;
-    let content: string;
+    let content: string | null;
     let isNewsPost = false;
-    
+
     if (!thread_id && aiCharacter.can_fetch_news) {
       const shouldFetchNews = Math.random() < (aiCharacter.news_fetch_probability || 0.1);
-      
+
       if (shouldFetchNews) {
         console.log('=== AI News Fetch Triggered ===');
         console.log('AI:', aiCharacter.name);
-        
+
         try {
-          const newsResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/fetch-news`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ aiCharacterId: aiCharacter.id }),
-          });
-          
+          const newsResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/fetch-news`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ aiCharacterId: aiCharacter.id }),
+            }
+          );
+
           if (newsResponse.ok) {
             const newsData = await newsResponse.json();
             content = newsData.comment;
@@ -183,8 +186,8 @@ export async function POST(request: NextRequest) {
             console.error('News fetch failed, falling back to normal post');
             // フォールバック：通常の投稿
             content = await generateAIResponseWithGPT(
-              boardSystemPrompt, 
-              posts, 
+              boardSystemPrompt,
+              posts,
               targetPost,
               config.max_response_length || 30,
               config.gpt_temperature || 1.0,
@@ -196,8 +199,8 @@ export async function POST(request: NextRequest) {
           console.error('News fetch error:', error);
           // フォールバック：通常の投稿
           content = await generateAIResponseWithGPT(
-            boardSystemPrompt, 
-            posts, 
+            boardSystemPrompt,
+            posts,
             targetPost,
             config.max_response_length || 30,
             config.gpt_temperature || 1.0,
@@ -208,8 +211,8 @@ export async function POST(request: NextRequest) {
       } else {
         // ニュースも画像も生成しない場合、通常のテキスト投稿
         content = await generateAIResponseWithGPT(
-          boardSystemPrompt, 
-          posts, 
+          boardSystemPrompt,
+          posts,
           targetPost,
           config.max_response_length || 30,
           config.gpt_temperature || 1.0,
@@ -219,19 +222,23 @@ export async function POST(request: NextRequest) {
       }
     } else if (!thread_id && aiCharacter.can_generate_images) {
       // ニュース機能がない場合、画像生成をチェック
-      const shouldGenerateImage = Math.random() < (aiCharacter.image_generation_probability || 0.05);
-      
+      const shouldGenerateImage =
+        Math.random() < (aiCharacter.image_generation_probability || 0.05);
+
       if (shouldGenerateImage) {
         console.log('=== AI Image Generation Triggered ===');
         console.log('AI:', aiCharacter.name);
-        
+
         try {
-          const imageGenResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/generate-image`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ aiCharacterId: aiCharacter.id }),
-          });
-          
+          const imageGenResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/generate-image`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ aiCharacterId: aiCharacter.id }),
+            }
+          );
+
           if (imageGenResponse.ok) {
             const imageData = await imageGenResponse.json();
             generatedImageUrl = imageData.imageUrl;
@@ -242,8 +249,8 @@ export async function POST(request: NextRequest) {
             console.error('Image generation failed, falling back to text');
             // フォールバック：通常のテキスト投稿
             content = await generateAIResponseWithGPT(
-              boardSystemPrompt, 
-              posts, 
+              boardSystemPrompt,
+              posts,
               targetPost,
               config.max_response_length || 30,
               config.gpt_temperature || 1.0,
@@ -255,8 +262,8 @@ export async function POST(request: NextRequest) {
           console.error('Image generation error:', error);
           // フォールバック：通常のテキスト投稿
           content = await generateAIResponseWithGPT(
-            boardSystemPrompt, 
-            posts, 
+            boardSystemPrompt,
+            posts,
             targetPost,
             config.max_response_length || 30,
             config.gpt_temperature || 1.0,
@@ -267,8 +274,8 @@ export async function POST(request: NextRequest) {
       } else {
         // 通常のテキスト投稿
         content = await generateAIResponseWithGPT(
-          boardSystemPrompt, 
-          posts, 
+          boardSystemPrompt,
+          posts,
           targetPost,
           config.max_response_length || 30,
           config.gpt_temperature || 1.0,
@@ -279,14 +286,21 @@ export async function POST(request: NextRequest) {
     } else {
       // 返信の場合は通常のテキスト投稿
       content = await generateAIResponseWithGPT(
-        boardSystemPrompt, 
-        posts, 
+        boardSystemPrompt,
+        posts,
         targetPost,
         config.max_response_length || 30,
         config.gpt_temperature || 1.0,
         config.gpt_presence_penalty || 0.6,
         config.gpt_frequency_penalty || 0.6
       );
+    }
+
+    // 生成に失敗したときは書かない。
+    // 中身の無い相槌を板に残すより、黙っているほうが場が保たれる。
+    if (!content || !content.trim()) {
+      console.error('AI generation returned nothing. Skipping the post.');
+      return NextResponse.json({ shouldPost: false, reason: 'generation_failed' });
     }
 
     // GPTで応答を生成（AIキャラクターのプロンプトを使用）
@@ -298,52 +312,54 @@ export async function POST(request: NextRequest) {
     console.log('Has generated image:', !!generatedImageUrl);
     console.log('Is news post:', isNewsPost);
     console.log('==============================');
-    
+
     // AIの最終投稿時刻を更新
-    await supabase
-      .from('ai_characters')
-      .update({ last_post_time: now })
-      .eq('id', aiCharacter.id);
+    await supabase.from('ai_characters').update({ last_post_time: now }).eq('id', aiCharacter.id);
 
     // AI介入ログを記録
-    await supabase.from('logs').insert([{
-      event_type: 'ai_intervention',
-      user_id: aiCharacter.id,
-      post_id: lastPost?.id || null,
-      metadata: { 
-        state, 
-        content, 
-        is_reply: !!thread_id, 
-        used_gpt: true,
-        has_image: !!targetPost?.media_url,
-        has_generated_image: !!generatedImageUrl,
-        is_news_post: isNewsPost,
-        probability,
-        ai_character: aiCharacter.name,
-        post_frequency: aiCharacter.post_frequency,
+    await supabase.from('logs').insert([
+      {
+        event_type: 'ai_intervention',
+        user_id: aiCharacter.id,
+        post_id: lastPost?.id || null,
+        metadata: {
+          state,
+          content,
+          is_reply: !!thread_id,
+          used_gpt: true,
+          has_image: !!targetPost?.media_url,
+          has_generated_image: !!generatedImageUrl,
+          is_news_post: isNewsPost,
+          probability,
+          ai_character: aiCharacter.name,
+          post_frequency: aiCharacter.post_frequency,
+        },
+        created_at: Date.now(),
       },
-      created_at: Date.now(),
-    }]);
+    ]);
 
     // AIリアクションの処理
     if (shouldAIReact(state) && lastPost) {
       const reactingAIs = await getActiveAICharacters(userCount);
       const reactCount = Math.floor(Math.random() * Math.min(2, reactingAIs.length)) + 1;
-      
+
       for (let i = 0; i < reactCount; i++) {
         const reactingAI = reactingAIs[Math.floor(Math.random() * reactingAIs.length)];
         const emoji = selectRandomEmoji();
-        
+
         // リアクションを追加（重複チェックはAPI側で行う）
-        await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/reactions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            postId: lastPost.id,
-            userId: reactingAI.id,
-            emoji,
-          }),
-        }).catch(err => console.error('AI reaction failed:', err));
+        await fetch(
+          `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/reactions`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              postId: lastPost.id,
+              userId: reactingAI.id,
+              emoji,
+            }),
+          }
+        ).catch((err) => console.error('AI reaction failed:', err));
       }
     }
 
