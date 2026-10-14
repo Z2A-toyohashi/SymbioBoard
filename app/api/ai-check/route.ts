@@ -4,11 +4,12 @@ import { detectSpaceState } from '@/lib/ai-logic';
 import { generateAIResponseWithGPT } from '@/lib/gpt';
 import { supabase } from '@/lib/supabase-client';
 import { shouldAIReact, selectRandomEmoji, getActiveAICharacters } from '@/lib/ai-manager';
+import { ensureAIPopulation } from '@/lib/ai-population';
 
 export async function POST(request: NextRequest) {
   try {
-    const { posts }: { posts: Post[] } = await request.json();
-    
+    const { posts, boardId }: { posts: Post[]; boardId?: string } = await request.json();
+
     // AI設定を取得
     const { data: settings } = await supabase
       .from('ai_settings')
@@ -42,21 +43,23 @@ export async function POST(request: NextRequest) {
       .gte('last_seen', Date.now() - 3600000); // 1時間以内にアクティブ
     
     const userCount = users?.length || 1;
-    
+
+    // 人数に見合うだけAIを住まわせる（足りなければ増やす）
+    await ensureAIPopulation(config, userCount);
+
     // 全AIキャラクターを取得
     const { data: allAICharacters } = await supabase
       .from('ai_characters')
       .select('*')
       .order('id');
-    
+
     if (!allAICharacters || allAICharacters.length === 0) {
       return NextResponse.json({ shouldPost: false, reason: 'No AI characters available' });
     }
 
-    // アクティブなAI数を計算（ユーザー数の50%）
-    const activeAICount = Math.max(1, Math.ceil(userCount * 0.5));
-    const activeAIs = allAICharacters.slice(0, Math.min(activeAICount, allAICharacters.length));
-    
+    // 住人の数自体がユーザー数に連動するようになったため、ここでの間引きはしない
+    const activeAIs = allAICharacters;
+
     // 各AIのクールダウンをチェックして、投稿可能なAIを選択
     const now = Date.now();
     const eligibleAIs = activeAIs.filter(ai => {
@@ -82,6 +85,27 @@ export async function POST(request: NextRequest) {
 
     // ランダムに1つのAIを選択
     const aiCharacter = eligibleAIs[Math.floor(Math.random() * eligibleAIs.length)];
+
+    // 板の話題に沿わせる。板ごとに住人の話す内容が変わらないと、板を分ける意味がないため。
+    let boardSystemPrompt = aiCharacter.system_prompt;
+    if (boardId) {
+      const { data: board } = await supabase
+        .from('boards')
+        .select('title, description')
+        .eq('id', boardId)
+        .single();
+      if (board) {
+        boardSystemPrompt = [
+          aiCharacter.system_prompt,
+          '',
+          `いまあなたがいるのは「${board.title}」という板です。`,
+          board.description ? `板の説明: ${board.description}` : '',
+          'この板の話題から外れないように発言してください。',
+        ]
+          .filter(Boolean)
+          .join('\n');
+      }
+    }
 
     // AI密度チェック（設定値を使用）
     if (posts.length > 0 && aiPosts.length / posts.length > config.max_ai_density) {
@@ -159,7 +183,7 @@ export async function POST(request: NextRequest) {
             console.error('News fetch failed, falling back to normal post');
             // フォールバック：通常の投稿
             content = await generateAIResponseWithGPT(
-              aiCharacter.system_prompt, 
+              boardSystemPrompt, 
               posts, 
               targetPost,
               config.max_response_length || 30,
@@ -172,7 +196,7 @@ export async function POST(request: NextRequest) {
           console.error('News fetch error:', error);
           // フォールバック：通常の投稿
           content = await generateAIResponseWithGPT(
-            aiCharacter.system_prompt, 
+            boardSystemPrompt, 
             posts, 
             targetPost,
             config.max_response_length || 30,
@@ -184,7 +208,7 @@ export async function POST(request: NextRequest) {
       } else {
         // ニュースも画像も生成しない場合、通常のテキスト投稿
         content = await generateAIResponseWithGPT(
-          aiCharacter.system_prompt, 
+          boardSystemPrompt, 
           posts, 
           targetPost,
           config.max_response_length || 30,
@@ -218,7 +242,7 @@ export async function POST(request: NextRequest) {
             console.error('Image generation failed, falling back to text');
             // フォールバック：通常のテキスト投稿
             content = await generateAIResponseWithGPT(
-              aiCharacter.system_prompt, 
+              boardSystemPrompt, 
               posts, 
               targetPost,
               config.max_response_length || 30,
@@ -231,7 +255,7 @@ export async function POST(request: NextRequest) {
           console.error('Image generation error:', error);
           // フォールバック：通常のテキスト投稿
           content = await generateAIResponseWithGPT(
-            aiCharacter.system_prompt, 
+            boardSystemPrompt, 
             posts, 
             targetPost,
             config.max_response_length || 30,
@@ -243,7 +267,7 @@ export async function POST(request: NextRequest) {
       } else {
         // 通常のテキスト投稿
         content = await generateAIResponseWithGPT(
-          aiCharacter.system_prompt, 
+          boardSystemPrompt, 
           posts, 
           targetPost,
           config.max_response_length || 30,
@@ -255,7 +279,7 @@ export async function POST(request: NextRequest) {
     } else {
       // 返信の場合は通常のテキスト投稿
       content = await generateAIResponseWithGPT(
-        aiCharacter.system_prompt, 
+        boardSystemPrompt, 
         posts, 
         targetPost,
         config.max_response_length || 30,

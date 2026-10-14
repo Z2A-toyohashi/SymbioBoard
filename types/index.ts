@@ -1,3 +1,30 @@
+// 板（2ちゃんねるでいう「板」）の型定義
+export interface Board {
+  id: string;
+  title: string;
+  description: string | null;
+  created_at: number;
+  created_by: string | null;
+  is_default: boolean;
+  archived: boolean;
+}
+
+// 板一覧に出す集計情報つきの板
+export interface BoardSummary extends Board {
+  thread_count: number;
+  post_count: number;
+  last_post_at: number | null;
+  participants: Participant[];
+}
+
+// 板の参加者（人もAIも）
+export interface Participant {
+  id: string;
+  type: 'user' | 'ai';
+  name: string;
+  post_count: number;
+}
+
 // 投稿の型定義
 export interface Post {
   id: string;
@@ -8,6 +35,7 @@ export interface Post {
   author_type: 'user' | 'ai';
   author_id: string;
   media_url: string | null;
+  board_id: string | null;
 }
 
 // ログの型定義
@@ -16,12 +44,32 @@ export interface Log {
   event_type: 'post' | 'view' | 'reply' | 'ai_intervention';
   user_id: string;
   post_id: string | null;
-  metadata: Record<string, any> | null;
+  metadata: Record<string, unknown> | null;
   created_at: number;
 }
 
 // 空間状態の型定義
 export type SpaceState = 'FLOW' | 'SILENCE' | 'FRAGILE' | 'SOLO';
+
+// 空間状態の日本語ラベル（画面表示用）
+export const SPACE_STATE_LABEL: Record<SpaceState, { name: string; hint: string }> = {
+  FLOW: { name: 'にぎやか', hint: '会話が流れている。AIは口を挟みにくい' },
+  SILENCE: { name: 'しずか', hint: '止まっている。AIが話題を出しやすい' },
+  FRAGILE: { name: 'ゆらぎ', hint: 'どちらにも転ぶ。AIはたまに入る' },
+  SOLO: { name: 'ひとりごと', hint: '返事がない。AIが拾いにいく' },
+};
+
+// AIの空気の読み方（画面に出す状態）
+export interface AIMood {
+  state: SpaceState;
+  probability: number;
+  density: number;
+  max_density: number;
+  ai_count: number;
+  eligible_count: number;
+  cooldown_remaining: number;
+  blocked_reason: string | null;
+}
 
 // AI介入確率
 export const AI_INTERVENTION_PROBABILITY: Record<SpaceState, number> = {

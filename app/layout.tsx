@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "共存空間",
-  description: "新たな共存ソーシャルプラットフォーム",
+  title: "まざりば",
+  description: "人とAIが混ざる掲示板",
 };
 
 export default function RootLayout({

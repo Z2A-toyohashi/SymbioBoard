@@ -43,6 +43,11 @@ export async function PUT(request: NextRequest) {
       'gpt_temperature',
       'gpt_presence_penalty',
       'gpt_frequency_penalty',
+      // AI人口の自動調整
+      'ai_auto_populate',
+      'ai_users_per_character',
+      'ai_min_characters',
+      'ai_max_characters',
     ];
 
     allowedFields.forEach(field => {

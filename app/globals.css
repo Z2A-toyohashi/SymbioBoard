@@ -1,32 +1,162 @@
 @import "tailwindcss";
 
+/*
+  まざりば のデザイン
+  ------------------------------------------------------------
+  下敷きは2ちゃんねる的な掲示板の作法（細い罫線、レス番号、名前の色分け、
+  情報密度の高い一覧）。そこに令和の読みやすさを足している。
+  具体的には、紙のようなオフホワイト、角を立てすぎない面、
+  等幅は番号と時刻だけに留めて本文は可読性の高いゴシック、
+  そしてダークモード対応。
+*/
+
+:root {
+  --mz-bg: #f4f1ea;
+  --mz-surface: #ffffff;
+  --mz-surface-sub: #faf8f4;
+  --mz-line: #e2dcd0;
+  --mz-line-strong: #cdc4b4;
+  --mz-ink: #272522;
+  --mz-ink-sub: #7b736a;
+  --mz-ink-faint: #a79f94;
+  --mz-accent: #1f6f5c;
+  --mz-accent-ink: #ffffff;
+  --mz-accent-weak: #e6f0ec;
+  --mz-human: #1f6f5c;
+  --mz-ai: #c0561d;
+  --mz-ai-weak: #fbeee5;
+  --mz-danger: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mz-bg: #16150f;
+    --mz-surface: #1e1d17;
+    --mz-surface-sub: #24231c;
+    --mz-line: #343227;
+    --mz-line-strong: #4a4738;
+    --mz-ink: #ece8dd;
+    --mz-ink-sub: #a39c8c;
+    --mz-ink-faint: #7a7365;
+    --mz-accent: #5dbb9f;
+    --mz-accent-ink: #11231d;
+    --mz-accent-weak: #1d2f28;
+    --mz-human: #5dbb9f;
+    --mz-ai: #e58c55;
+    --mz-ai-weak: #2e241b;
+    --mz-danger: #e4766c;
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
+html {
+  color-scheme: light dark;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  background: var(--mz-bg);
+  color: var(--mz-ink);
+  font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 下部固定の入力欄に隠れないための逃げ。各画面で上書きする */
+  overscroll-behavior-y: none;
 }
 
 @layer utilities {
-  .animate-fade-in {
-    animation: fadeIn 0.3s ease-in;
+  .mz-surface {
+    background: var(--mz-surface);
   }
-  
-  @keyframes fadeIn {
+  .mz-surface-sub {
+    background: var(--mz-surface-sub);
+  }
+  .mz-ink {
+    color: var(--mz-ink);
+  }
+  .mz-ink-sub {
+    color: var(--mz-ink-sub);
+  }
+  .mz-ink-faint {
+    color: var(--mz-ink-faint);
+  }
+  .mz-border {
+    border-color: var(--mz-line);
+  }
+  .mz-border-strong {
+    border-color: var(--mz-line-strong);
+  }
+  .mz-accent {
+    color: var(--mz-accent);
+  }
+  .mz-bg-accent {
+    background: var(--mz-accent);
+    color: var(--mz-accent-ink);
+  }
+  .mz-bg-accent-weak {
+    background: var(--mz-accent-weak);
+  }
+  .mz-human {
+    color: var(--mz-human);
+  }
+  .mz-ai {
+    color: var(--mz-ai);
+  }
+  .mz-bg-ai-weak {
+    background: var(--mz-ai-weak);
+  }
+
+  /* レス番号・時刻・IDに使う等幅 */
+  .mz-mono {
+    font-family: 'SF Mono', 'Menlo', 'Consolas', 'Noto Sans Mono', ui-monospace, monospace;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* iOS Safari のホームバー分を確保する */
+  .mz-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .animate-fade-in {
+    animation: mzFadeIn 0.25s ease-out;
+  }
+
+  @keyframes mzFadeIn {
     from {
       opacity: 0;
-      transform: translateY(10px);
+      transform: translateY(6px);
     }
     to {
       opacity: 1;
       transform: translateY(0);
     }
+  }
+}
+
+/* 入力系の見た目を全体で揃える */
+input,
+textarea,
+select {
+  background: var(--mz-surface);
+  color: var(--mz-ink);
+  font-family: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--mz-ink-faint);
+}
+
+/* スマホで入力欄にフォーカスしたとき、iOSが勝手に拡大するのを防ぐ */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
   }
 }

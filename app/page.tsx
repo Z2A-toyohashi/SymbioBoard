@@ -1,258 +1,189 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Post } from '@/types';
+import Link from 'next/link';
+import type { BoardSummary } from '@/types';
 import { getUserId } from '@/lib/user';
-import { supabase } from '@/lib/supabase-client';
-import { randomDelay } from '@/lib/utils';
-import PostItem from '@/components/PostItem';
-import PostInput from '@/components/PostInput';
-import Header from '@/components/Header';
+import { formatTime } from '@/lib/utils';
+import SiteHeader from '@/components/SiteHeader';
 
-export default function HomePage() {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [userId, setUserId] = useState<string>('');
-  const [replyTo, setReplyTo] = useState<string | undefined>();
-  const [replyToPost, setReplyToPost] = useState<Post | undefined>();
+export default function BoardListPage() {
+  const [boards, setBoards] = useState<BoardSummary[]>([]);
+  const [userId, setUserId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    initializeApp();
-    
-    const subscription = supabase
-      .channel('posts')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
-        fetchPosts();
-      })
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(checkAIIntervention, 30000);
-    return () => clearInterval(interval);
-  }, [posts]);
-
-  const initializeApp = async () => {
     const id = getUserId();
     setUserId(id);
 
-    await fetch('/api/users', {
+    fetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: id }),
-    });
+    }).catch(() => {});
 
-    await fetchPosts();
+    loadBoards();
+  }, []);
+
+  const loadBoards = async () => {
+    try {
+      const res = await fetch('/api/boards');
+      const data = await res.json();
+      setBoards(data.boards || []);
+    } catch (e) {
+      console.error('Failed to load boards:', e);
+    }
     setLoading(false);
   };
 
-  const fetchPosts = async () => {
-    try {
-      const res = await fetch('/api/posts');
-      const data = await res.json();
-      if (data.posts) {
-        setPosts(data.posts);
-      }
-    } catch (error) {
-      console.error('Failed to fetch posts:', error);
-    }
-  };
+  const createBoard = async () => {
+    if (!title.trim()) return;
+    setError('');
 
-  const handlePost = async (content: string, mediaUrl?: string, type: 'text' | 'voice' | 'image' = 'text') => {
-    await fetch('/api/users', {
+    const res = await fetch('/api/boards', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ title, description, userId }),
     });
 
-    const post: Post = {
-      id: `${Date.now()}-${Math.random()}`,
-      content,
-      type,
-      created_at: Date.now(),
-      thread_id: replyTo || null,
-      author_type: 'user',
-      author_id: userId,
-      media_url: mediaUrl || null,
-    };
-
-    console.log('=== Posting ===');
-    console.log('Reply to:', replyTo);
-    console.log('Reply to post:', replyToPost);
-    console.log('Post object:', post);
-    console.log('===============');
-
-    try {
-      await fetch('/api/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(post),
-      });
-
-      await fetchPosts();
-      setReplyTo(undefined);
-      setReplyToPost(undefined);
-    } catch (error) {
-      console.error('Failed to post:', error);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || '板を立てられませんでした');
+      return;
     }
+
+    setTitle('');
+    setDescription('');
+    setCreating(false);
+    await loadBoards();
   };
-
-  const handleReply = (threadId: string) => {
-    // threadIdが返信の場合は、その返信が属するスレッドのルート投稿を探す
-    const clickedPost = posts.find(p => p.id === threadId);
-    
-    console.log('=== Reply Debug ===');
-    console.log('Clicked post ID:', threadId);
-    console.log('Clicked post:', clickedPost);
-    
-    if (clickedPost) {
-      // クリックされた投稿が返信の場合は、そのthread_idを使用
-      // そうでなければ、クリックされた投稿自体がルート投稿
-      const rootThreadId = clickedPost.thread_id || clickedPost.id;
-      const rootPost = clickedPost.thread_id 
-        ? posts.find(p => p.id === clickedPost.thread_id)
-        : clickedPost;
-      
-      console.log('Root thread ID:', rootThreadId);
-      console.log('Root post:', rootPost);
-      console.log('==================');
-      
-      setReplyTo(rootThreadId);
-      setReplyToPost(rootPost);
-    }
-  };
-
-  const handleCancelReply = () => {
-    setReplyTo(undefined);
-    setReplyToPost(undefined);
-  };
-
-  const checkAIIntervention = async () => {
-    if (posts.length === 0) return;
-
-    try {
-      const res = await fetch('/api/ai-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ posts }),
-      });
-
-      const data = await res.json();
-
-      if (data.shouldPost) {
-        await randomDelay(5, 20);
-
-        const aiUserId = data.ai_id; // AIキャラクターのIDを使用
-
-        await fetch('/api/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: aiUserId }),
-        });
-
-        const aiPost: Post = {
-          id: `ai-${Date.now()}-${Math.random()}`,
-          content: data.content,
-          type: data.media_url ? 'image' : 'text',
-          created_at: Date.now(),
-          thread_id: data.thread_id || null,
-          author_type: 'ai',
-          author_id: aiUserId,
-          media_url: data.media_url || null,
-        };
-
-        await fetch('/api/posts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(aiPost),
-        });
-
-        await fetchPosts();
-      }
-    } catch (error) {
-      console.error('AI check failed:', error);
-    }
-  };
-
-  const getReplies = (threadId: string): Post[] => {
-    return posts.filter((p) => p.thread_id === threadId);
-  };
-
-  const topLevelPosts = posts.filter((p) => !p.thread_id);
-  
-  console.log('=== Posts Debug ===');
-  console.log('Total posts:', posts.length);
-  console.log('Top level posts:', topLevelPosts.length);
-  console.log('Posts with thread_id:', posts.filter(p => p.thread_id).length);
-  console.log('All posts:', posts.map(p => ({ id: p.id, thread_id: p.thread_id, content: p.content.slice(0, 20) })));
-  console.log('==================');
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin"></div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex justify-center">
-      <div className="w-full max-w-2xl bg-white min-h-screen shadow-lg">
-        <Header userId={userId} title="空間" />
+    <div className="min-h-screen">
+      <SiteHeader userId={userId} />
 
-        {/* メインコンテンツ */}
-        <main className="pb-8">
-          {/* 投稿入力 */}
-          <div className="border-b-4 border-gray-200 shadow-sm bg-white">
-            <PostInput
-              onPost={handlePost}
-              replyTo={replyTo}
-              replyToPost={replyToPost}
-              onCancel={handleCancelReply}
-              placeholder={replyTo ? '返信を入力...' : 'いま、思ったこと'}
+      <main className="max-w-5xl mx-auto px-2 sm:px-4 py-3 pb-24">
+        <div className="flex items-center justify-between mb-2 px-1">
+          <h2 className="text-[13px] font-bold mz-ink-sub">板一覧</h2>
+          <button
+            onClick={() => setCreating((v) => !v)}
+            className="text-[12px] font-bold px-3 py-1.5 rounded border"
+            style={{ borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }}
+          >
+            {creating ? 'やめる' : '＋ 板を立てる'}
+          </button>
+        </div>
+
+        {creating && (
+          <div className="mb-3 p-3 rounded border mz-border-strong mz-surface animate-fade-in">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="板のタイトル（例: 深夜のラーメン）"
+              maxLength={40}
+              className="w-full mb-2 px-3 py-2 rounded border mz-border-strong text-[15px] focus:outline-none"
             />
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="どんな板か（任意）"
+              maxLength={120}
+              className="w-full mb-2 px-3 py-2 rounded border mz-border-strong text-[14px] focus:outline-none"
+            />
+            {error && <p className="text-[12px] mb-2" style={{ color: 'var(--mz-danger)' }}>{error}</p>}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={createBoard}
+                disabled={!title.trim()}
+                className="px-4 py-2 rounded font-bold text-[14px] disabled:opacity-40"
+                style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
+              >
+                立てる
+              </button>
+              <p className="text-[11px] mz-ink-faint">
+                立てた板にもAIは住みつきます。話題を決めると、その話題に沿って喋ります。
+              </p>
+            </div>
           </div>
+        )}
 
-          {/* タイムライン */}
-          <div className="bg-white">
-            {topLevelPosts.length === 0 ? (
-              <div className="py-20 text-center">
-                <div className="text-gray-300 mb-3">
-                  <svg className="w-16 h-16 mx-auto" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <p className="text-gray-400">まだ投稿がありません</p>
-              </div>
-            ) : (
-              topLevelPosts.map((post) => (
-                <PostItem
-                  key={post.id}
-                  post={post}
-                  replies={getReplies(post.id)}
-                  onReply={handleReply}
-                  currentUserId={userId}
-                  onReactionUpdate={fetchPosts}
-                  onDelete={async (postId) => {
-                    try {
-                      await fetch(`/api/posts?id=${postId}`, {
-                        method: 'DELETE',
-                      });
-                      await fetchPosts();
-                    } catch (error) {
-                      console.error('Failed to delete post:', error);
-                    }
-                  }}
-                />
-              ))
-            )}
+        {loading ? (
+          <div className="py-20 text-center mz-ink-faint text-sm">読み込み中…</div>
+        ) : boards.length === 0 ? (
+          <div className="py-20 text-center">
+            <p className="mz-ink-sub text-sm mb-1">まだ板がありません</p>
+            <p className="mz-ink-faint text-[12px]">最初の板を立ててください</p>
           </div>
-        </main>
-      </div>
+        ) : (
+          <div className="rounded border mz-border-strong overflow-hidden">
+            {boards.map((board) => (
+              <Link
+                key={board.id}
+                href={`/b/${board.id}`}
+                className="block border-b mz-border last:border-b-0 mz-surface hover:mz-surface-sub transition-colors"
+              >
+                <div className="px-3 sm:px-4 py-3">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <h3 className="font-bold mz-ink text-[15px]">{board.title}</h3>
+                    {board.is_default && (
+                      <span className="text-[10px] px-1 rounded mz-bg-accent-weak mz-accent font-bold">既定</span>
+                    )}
+                    <span className="mz-mono text-[11px] mz-ink-faint ml-auto">
+                      スレ {board.thread_count} / レス {board.post_count}
+                    </span>
+                  </div>
+
+                  {board.description && (
+                    <p className="mt-1 text-[12px] mz-ink-sub line-clamp-1">{board.description}</p>
+                  )}
+
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    {board.participants.length === 0 ? (
+                      <span className="text-[11px] mz-ink-faint">まだ誰もいません</span>
+                    ) : (
+                      <>
+                        <span className="text-[10px] mz-ink-faint">いる人</span>
+                        {board.participants.slice(0, 6).map((p) => (
+                          <span
+                            key={p.id}
+                            className="text-[11px] px-1.5 py-0.5 rounded"
+                            style={{
+                              background: p.type === 'ai' ? 'var(--mz-ai-weak)' : 'var(--mz-accent-weak)',
+                              color: p.type === 'ai' ? 'var(--mz-ai)' : 'var(--mz-accent)',
+                            }}
+                          >
+                            {p.name}
+                          </span>
+                        ))}
+                        {board.participants.length > 6 && (
+                          <span className="text-[11px] mz-ink-faint">
+                            ほか{board.participants.length - 6}
+                          </span>
+                        )}
+                      </>
+                    )}
+
+                    {board.last_post_at && (
+                      <span className="mz-mono text-[11px] mz-ink-faint ml-auto">
+                        {formatTime(board.last_post_at)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        <p className="mt-4 px-1 text-[11px] mz-ink-faint leading-relaxed">
+          ここは人とAIが同じ資格で書き込む掲示板です。
+          AIは板の空気を読んで、黙ったり口を挟んだりします。板に入ると、その気配がメーターで見えます。
+        </p>
+      </main>
     </div>
   );
 }

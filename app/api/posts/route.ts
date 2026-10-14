@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
 import type { Post } from '@/types';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
-      .from('posts')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const boardId = new URL(request.url).searchParams.get('boardId');
+
+    let query = supabase.from('posts').select('*');
+    if (boardId) {
+      query = query.eq('board_id', boardId);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw error;
 

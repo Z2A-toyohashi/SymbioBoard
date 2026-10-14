@@ -2,24 +2,32 @@
 
 import { useState, useRef, KeyboardEvent } from 'react';
 import type { Post } from '@/types';
-import { getUserColor } from '@/lib/utils';
 
+/**
+ * 投稿欄は画面下に固定する。
+ * 掲示板は上から下に読むので、読み終わった位置と書く位置が近いほうが自然だし、
+ * スマホでは親指が届く範囲に入力欄と送信ボタンが来る。
+ * 普段は1行。書き始めると伸びる。
+ */
 interface PostInputProps {
   onPost: (content: string, mediaUrl?: string, type?: 'text' | 'voice' | 'image') => void;
   placeholder?: string;
   replyTo?: string;
   replyToPost?: Post;
   onCancel?: () => void;
+  aiNames?: Record<string, string>;
 }
 
 export default function PostInput({
   onPost,
-  placeholder = 'いま、思ったこと',
+  placeholder = 'いま思ったことを書く',
   replyTo,
   replyToPost,
   onCancel,
+  aiNames = {},
 }: PostInputProps) {
   const [content, setContent] = useState('');
+  const [expanded, setExpanded] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -36,11 +44,6 @@ export default function PostInput({
   };
 
   const handleSubmit = async () => {
-    console.log('=== Submit Debug ===');
-    console.log('Content:', content);
-    console.log('Image file:', imageFile);
-    console.log('==================');
-
     if (!content.trim() && !imageFile) return;
 
     let mediaUrl: string | undefined;
@@ -51,39 +54,17 @@ export default function PostInput({
       const formData = new FormData();
       formData.append('image', imageFile);
 
-      console.log('=== Upload Start ===');
-      console.log('File name:', imageFile.name);
-      console.log('File size:', imageFile.size);
-      console.log('File type:', imageFile.type);
-
       try {
-        // Try Supabase upload first (for production)
-        console.log('Attempting Supabase upload...');
-        let res = await fetch('/api/upload-supabase', {
-          method: 'POST',
-          body: formData,
-        });
-        
-        console.log('Supabase upload response status:', res.status);
-        
-        // If Supabase fails, fallback to local upload (for development)
+        // 本番は Supabase Storage、開発はローカルへ退避する二段構え
+        let res = await fetch('/api/upload-supabase', { method: 'POST', body: formData });
         if (!res.ok) {
-          console.log('Supabase upload failed, trying local upload...');
-          res = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData,
-          });
-          console.log('Local upload response status:', res.status);
+          res = await fetch('/api/upload', { method: 'POST', body: formData });
         }
-        
         if (!res.ok) {
           const errorData = await res.json();
-          console.error('Upload error response:', errorData);
           throw new Error(errorData.error || 'Upload failed');
         }
-        
         const data = await res.json();
-        console.log('Upload success:', data);
         mediaUrl = data.url;
         type = 'image';
       } catch (error) {
@@ -99,44 +80,34 @@ export default function PostInput({
     setContent('');
     setImagePreview(null);
     setImageFile(null);
+    setExpanded(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    
-    console.log('=== Image Select Debug ===');
-    console.log('File selected:', file);
-    console.log('File name:', file?.name);
-    console.log('File size:', file?.size);
-    console.log('File type:', file?.type);
-    console.log('========================');
-    
-    if (file) {
-      // ファイルサイズチェック（5MB以下）
-      if (file.size > 5 * 1024 * 1024) {
-        alert('画像サイズは5MB以下にしてください');
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-      }
+    if (!file) return;
 
-      // ファイルタイプチェック
-      if (!file.type.startsWith('image/')) {
-        alert('画像ファイルを選択してください');
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-      }
-
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onload = () => setImagePreview(reader.result as string);
-      reader.onerror = (error) => {
-        console.error('FileReader error:', error);
-        alert('画像の読み込みに失敗しました');
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      };
-      reader.readAsDataURL(file);
+    if (file.size > 5 * 1024 * 1024) {
+      alert('画像サイズは5MB以下にしてください');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
     }
+    if (!file.type.startsWith('image/')) {
+      alert('画像ファイルを選択してください');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setImageFile(file);
+    setExpanded(true);
+    const reader = new FileReader();
+    reader.onload = () => setImagePreview(reader.result as string);
+    reader.onerror = () => {
+      alert('画像の読み込みに失敗しました');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsDataURL(file);
   };
 
   const startRecording = async () => {
@@ -146,10 +117,7 @@ export default function PostInput({
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (e) => {
-        audioChunksRef.current.push(e.data);
-      };
-
+      mediaRecorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         await transcribeAudio(audioBlob);
@@ -174,21 +142,16 @@ export default function PostInput({
   const transcribeAudio = async (audioBlob: Blob) => {
     const formData = new FormData();
     formData.append('file', audioBlob, 'recording.webm');
-
     try {
-      const res = await fetch('/api/transcribe', {
-        method: 'POST',
-        body: formData,
-      });
-      
+      const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Transcription failed');
       }
-      
       const data = await res.json();
       if (data.text) {
         setContent((prev) => prev + data.text);
+        setExpanded(true);
       }
     } catch (error) {
       console.error('Transcription failed:', error);
@@ -196,93 +159,69 @@ export default function PostInput({
     }
   };
 
+  const canSend = (content.trim().length > 0 || imageFile !== null) && !isUploading;
+
   return (
-    <div className="p-5 bg-gray-50/50 border-b-4 border-gray-100">
-      {replyTo && replyToPost && (
-        <div className="mb-3 bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-blue-700">💬 返信先</span>
+    <div className="fixed bottom-0 left-0 right-0 z-30 border-t mz-border-strong mz-surface mz-safe-bottom">
+      <div className="max-w-5xl mx-auto px-2 sm:px-4">
+        {replyTo && replyToPost && (
+          <div className="flex items-center gap-2 py-1.5 border-b mz-border text-[12px]">
+            <span className="mz-mono mz-accent shrink-0">返信先</span>
+            <span className="font-bold shrink-0" style={{ color: replyToPost.author_type === 'ai' ? 'var(--mz-ai)' : 'var(--mz-human)' }}>
+              {replyToPost.author_type === 'ai' ? aiNames[replyToPost.author_id] || 'AI' : '名無し'}
+            </span>
+            <span className="mz-ink-sub truncate flex-1 min-w-0">{replyToPost.content}</span>
             {onCancel && (
-              <button
-                onClick={onCancel}
-                className="text-blue-400 hover:text-blue-600 transition-colors font-bold text-lg leading-none"
-              >
+              <button onClick={onCancel} className="shrink-0 mz-ink-faint px-1" aria-label="返信をやめる">
                 ✕
               </button>
             )}
           </div>
-          <div className="flex gap-2 items-start">
-            <div
-              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-              style={{ backgroundColor: getUserColor(replyToPost.author_id) }}
+        )}
+
+        {imagePreview && (
+          <div className="py-2 relative inline-block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imagePreview} alt="プレビュー" className="max-h-28 rounded border mz-border" />
+            <button
+              onClick={() => {
+                setImagePreview(null);
+                setImageFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }}
+              className="absolute top-3 right-1 w-6 h-6 rounded-full bg-black/70 text-white text-xs"
             >
-              {replyToPost.author_id.slice(-2)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-gray-700">{replyToPost.author_id}</p>
-              <p className="text-xs text-gray-600 line-clamp-2 mt-1">{replyToPost.content}</p>
-            </div>
+              ✕
+            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {imagePreview && (
-        <div className="mb-4 relative inline-block">
-          <img
-            src={imagePreview}
-            alt="プレビュー"
-            className="max-h-64 rounded-xl border-2 border-blue-200 shadow-md"
-          />
-          <button
-            onClick={() => {
-              setImagePreview(null);
-              setImageFile(null);
-              if (fileInputRef.current) fileInputRef.current.value = '';
-            }}
-            className="absolute top-2 right-2 bg-black bg-opacity-70 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-opacity-90 transition-all shadow-lg"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      <textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        className="w-full resize-none border-0 focus:outline-none text-gray-900 text-[15px] placeholder-gray-400 mb-4 bg-transparent"
-        rows={3}
-      />
-
-      <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-        <div className="flex gap-2">
+        <div className="flex items-end gap-1.5 py-2">
           <button
             onMouseDown={startRecording}
             onMouseUp={stopRecording}
             onMouseLeave={stopRecording}
             onTouchStart={startRecording}
             onTouchEnd={stopRecording}
-            className={`w-11 h-11 rounded-full flex items-center justify-center transition-all shadow-md ${
+            className="shrink-0 w-9 h-9 rounded-full border flex items-center justify-center text-[15px]"
+            style={
               isRecording
-                ? 'bg-indigo-600 text-white shadow-lg scale-110 ring-4 ring-indigo-200'
-                : 'bg-blue-100 text-blue-600 hover:bg-blue-200 hover:shadow-lg'
-            }`}
-            title="長押しで録音"
+                ? { background: 'var(--mz-ai)', color: '#fff', borderColor: 'var(--mz-ai)' }
+                : { borderColor: 'var(--mz-line-strong)', color: 'var(--mz-ink-sub)' }
+            }
+            title="長押しで録音して文字にする"
+            aria-label="音声入力"
           >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" />
-            </svg>
+            ◉
           </button>
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="w-11 h-11 rounded-full bg-indigo-100 text-indigo-600 hover:bg-indigo-200 flex items-center justify-center transition-all shadow-md hover:shadow-lg"
-            title="画像を選択"
+            className="shrink-0 w-9 h-9 rounded-full border mz-border-strong mz-ink-sub flex items-center justify-center text-[15px]"
+            title="画像を選ぶ"
+            aria-label="画像を添付"
           >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-            </svg>
+            ▣
           </button>
           <input
             ref={fileInputRef}
@@ -291,20 +230,32 @@ export default function PostInput({
             onChange={handleImageSelect}
             className="hidden"
           />
+
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setExpanded(true)}
+            placeholder={replyTo ? '返信を書く' : placeholder}
+            rows={expanded ? 3 : 1}
+            className="flex-1 min-w-0 resize-none rounded-lg border mz-border-strong px-3 py-2 text-[15px] leading-relaxed focus:outline-none"
+            style={{ outlineColor: 'var(--mz-accent)' }}
+          />
+
+          <button
+            onClick={handleSubmit}
+            disabled={!canSend}
+            className="shrink-0 h-9 px-4 rounded-lg font-bold text-[14px] disabled:opacity-40"
+            style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
+          >
+            {isUploading ? '送信中' : '書く'}
+          </button>
         </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={(!content.trim() && !imageFile) || isUploading}
-          className="px-10 py-3 bg-blue-600 text-white rounded-full hover:bg-indigo-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all text-base font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none disabled:shadow-md"
-        >
-          {isUploading ? '送信中...' : '投稿'}
-        </button>
+        {expanded && (
+          <p className="pb-1.5 text-[10px] mz-ink-faint">Cmd / Ctrl + Enter でも投稿できます</p>
+        )}
       </div>
-
-      <p className="text-xs text-gray-400 mt-3">
-        Cmd/Ctrl + Enter で投稿
-      </p>
     </div>
   );
 }

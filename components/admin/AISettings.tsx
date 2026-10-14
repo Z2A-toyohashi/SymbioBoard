@@ -1,359 +1,307 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { SPACE_STATE_LABEL } from '@/types';
 
-interface AISettingsProps {
-  currentAIDensity: number;
+/**
+ * 場の設定。
+ *
+ * 作り直すにあたって「このアプリで運営が決めるべきことは何か」から考えた。
+ * 答えは、AIが何を喋るかではなく、AIがどれだけ出てくるかだった。
+ * 人が書いた場にAIが何割混ざるか、沈黙をどれだけ我慢するか、何体住んでいるか。
+ * だからこの画面は「口の出し方」「人口」「言葉づかい」の3つだけに絞っている。
+ */
+
+interface Settings {
+  prob_flow: number;
+  prob_silence: number;
+  prob_fragile: number;
+  prob_solo: number;
+  max_ai_density: number;
+  cooldown_min: number;
+  cooldown_max: number;
+  max_response_length: number;
+  gpt_temperature: number;
+  gpt_presence_penalty: number;
+  gpt_frequency_penalty: number;
+  system_prompt: string;
+  ai_auto_populate: boolean;
+  ai_users_per_character: number;
+  ai_min_characters: number;
+  ai_max_characters: number;
 }
 
-export default function AISettings({ currentAIDensity }: AISettingsProps) {
-  const [systemPrompt, setSystemPrompt] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [showPromptEditor, setShowPromptEditor] = useState(false);
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  
-  const [checkInterval, setCheckInterval] = useState(30000);
-  const [cooldownMin, setCooldownMin] = useState(300000);
-  const [cooldownMax, setCooldownMax] = useState(900000);
-  const [maxAIDensity, setMaxAIDensity] = useState(0.2);
-  const [delayMin, setDelayMin] = useState(5000);
-  const [delayMax, setDelayMax] = useState(20000);
-  const [probFlow, setProbFlow] = useState(0.0);
-  const [probSilence, setProbSilence] = useState(0.35);
-  const [probFragile, setProbFragile] = useState(0.15);
-  const [probSolo, setProbSolo] = useState(0.5);
-  const [maxResponseLength, setMaxResponseLength] = useState(10);
-  const [gptTemperature, setGptTemperature] = useState(1.0);
-  const [gptPresencePenalty, setGptPresencePenalty] = useState(0.6);
-  const [gptFrequencyPenalty, setGptFrequencyPenalty] = useState(0.6);
+export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?: number }) {
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    loadAISettings();
+    fetch('/api/ai-settings')
+      .then((r) => r.json())
+      .then((d) => d.settings && setSettings(d.settings))
+      .catch(() => setError('設定を読み込めませんでした'));
   }, []);
 
-  const loadAISettings = async () => {
-    try {
-      const res = await fetch('/api/ai-settings');
-      const data = await res.json();
-      if (data.settings) {
-        setSystemPrompt(data.settings.system_prompt);
-        setCheckInterval(data.settings.check_interval || 30000);
-        setCooldownMin(data.settings.cooldown_min || 300000);
-        setCooldownMax(data.settings.cooldown_max || 900000);
-        setMaxAIDensity(data.settings.max_ai_density || 0.2);
-        setDelayMin(data.settings.delay_min || 5000);
-        setDelayMax(data.settings.delay_max || 20000);
-        setProbFlow(data.settings.prob_flow || 0.0);
-        setProbSilence(data.settings.prob_silence || 0.35);
-        setProbFragile(data.settings.prob_fragile || 0.15);
-        setProbSolo(data.settings.prob_solo || 0.5);
-        setMaxResponseLength(data.settings.max_response_length || 10);
-        setGptTemperature(data.settings.gpt_temperature || 1.0);
-        setGptPresencePenalty(data.settings.gpt_presence_penalty || 0.6);
-        setGptFrequencyPenalty(data.settings.gpt_frequency_penalty || 0.6);
-      }
-    } catch (error) {
-      console.error('Failed to load AI settings:', error);
+  const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
+    setSettings((prev) => (prev ? { ...prev, [key]: value } : prev));
+    setSaved(false);
+  };
+
+  const save = async () => {
+    if (!settings) return;
+    setSaving(true);
+    setError('');
+
+    const res = await fetch('/api/ai-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+
+    setSaving(false);
+    if (res.ok) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } else {
+      setError('保存できませんでした');
     }
   };
 
-  const saveAISettings = async () => {
-    setIsSaving(true);
-    try {
-      const payload = {
-        system_prompt: systemPrompt,
-        check_interval: checkInterval,
-        cooldown_min: cooldownMin,
-        cooldown_max: cooldownMax,
-        max_ai_density: maxAIDensity,
-        delay_min: delayMin,
-        delay_max: delayMax,
-        prob_flow: probFlow,
-        prob_silence: probSilence,
-        prob_fragile: probFragile,
-        prob_solo: probSolo,
-        max_response_length: maxResponseLength,
-        gpt_temperature: gptTemperature,
-        gpt_presence_penalty: gptPresencePenalty,
-        gpt_frequency_penalty: gptFrequencyPenalty,
-      };
-
-      console.log('=== Saving AI Settings ===');
-      console.log('Payload:', payload);
-      console.log('System Prompt:', systemPrompt);
-      console.log('=========================');
-
-      const res = await fetch('/api/ai-settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        console.log('Save response:', data);
-        alert('設定を保存しました');
-      } else {
-        alert('保存に失敗しました');
-      }
-    } catch (error) {
-      console.error('Failed to save AI settings:', error);
-      alert('保存に失敗しました');
-    }
-    setIsSaving(false);
-  };
+  if (!settings) {
+    return <div className="py-10 text-center mz-ink-faint text-sm">{error || '読み込み中…'}</div>;
+  }
 
   return (
-    <div className="bg-white rounded-xl border-2 border-blue-200 shadow-lg p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center gap-2">
-            🤖 AI設定
-          </h2>
-          <p className="text-xs text-gray-500 mt-1">AIの振る舞いとパラメータを調整</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowPromptEditor(!showPromptEditor)}
-            className={`px-4 py-2 rounded-lg transition-all text-sm font-semibold flex-1 sm:flex-none shadow-md ${
-              showPromptEditor
-                ? 'bg-blue-600 text-white'
-                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-            }`}
-          >
-            📝 プロンプト
-          </button>
-          <button
-            onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-            className={`px-4 py-2 rounded-lg transition-all text-sm font-semibold flex-1 sm:flex-none shadow-md ${
-              showAdvancedSettings
-                ? 'bg-indigo-600 text-white'
-                : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
-            }`}
-          >
-            ⚙️ 詳細設定
-          </button>
-        </div>
-      </div>
-
-      {showPromptEditor && (
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-300 p-4 sm:p-6 mb-4">
-          <label className="block text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <span className="text-lg">💬</span>
-            システムプロンプト
-          </label>
-          <textarea
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            className="w-full h-48 sm:h-64 px-3 sm:px-4 py-2 sm:py-3 border-2 border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs sm:text-sm font-mono shadow-inner bg-white"
-            placeholder="AIの振る舞いを定義するプロンプトを入力..."
+    <div className="space-y-4">
+      <Section
+        title="AIの口の出し方"
+        note="場の空気ごとに、AIが発言を試みる確率です。この数字は利用者側のメーターにもそのまま出ます。"
+      >
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Slider
+            label={`にぎやかな時（${SPACE_STATE_LABEL.FLOW.name}）`}
+            hint="会話が流れている。低いほど人の会話を邪魔しない"
+            value={settings.prob_flow}
+            onChange={(v) => update('prob_flow', v)}
           />
-          <p className="text-xs text-gray-600 mt-2">💡 短く簡潔な応答を促すプロンプトを設定してください</p>
+          <Slider
+            label={`静かな時（${SPACE_STATE_LABEL.SILENCE.name}）`}
+            hint="誰も書いていない。高いほどAIが口火を切る"
+            value={settings.prob_silence}
+            onChange={(v) => update('prob_silence', v)}
+          />
+          <Slider
+            label={`揺れている時（${SPACE_STATE_LABEL.FRAGILE.name}）`}
+            hint="どちらにも転ぶ場面"
+            value={settings.prob_fragile}
+            onChange={(v) => update('prob_fragile', v)}
+          />
+          <Slider
+            label={`返事がない時（${SPACE_STATE_LABEL.SOLO.name}）`}
+            hint="独り言が放置されている。高いほど拾いにいく"
+            value={settings.prob_solo}
+            onChange={(v) => update('prob_solo', v)}
+          />
         </div>
-      )}
 
-      {showAdvancedSettings && (
-        <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-300 p-4 sm:p-6 mb-4">
-          <h3 className="text-base font-bold text-gray-800 mb-6 flex items-center gap-2">
-            <span className="text-xl">⚙️</span>
-            詳細パラメータ
-          </h3>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* タイミング設定 */}
-            <div className="bg-white rounded-xl p-5 shadow-md border-2 border-blue-200">
-              <h4 className="text-sm font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-300 flex items-center gap-2">
-                <span>⏱️</span> タイミング制御
-              </h4>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">チェック間隔（ms）</label>
-                  <input type="number" value={checkInterval} onChange={(e) => setCheckInterval(Number(e.target.value))} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <p className="text-xs text-blue-600 font-medium mt-1 bg-blue-50 px-2 py-1 rounded">⏰ {(checkInterval / 1000).toFixed(0)}秒ごと</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">クールダウン最小（ms）</label>
-                  <input type="number" value={cooldownMin} onChange={(e) => setCooldownMin(Number(e.target.value))} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <p className="text-xs text-blue-600 font-medium mt-1 bg-blue-50 px-2 py-1 rounded">⏰ 最短 {(cooldownMin / 60000).toFixed(1)}分</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">クールダウン最大（ms）</label>
-                  <input type="number" value={cooldownMax} onChange={(e) => setCooldownMax(Number(e.target.value))} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <p className="text-xs text-blue-600 font-medium mt-1 bg-blue-50 px-2 py-1 rounded">⏰ 最長 {(cooldownMax / 60000).toFixed(1)}分</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">投稿遅延最小（ms）</label>
-                  <input type="number" value={delayMin} onChange={(e) => setDelayMin(Number(e.target.value))} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <p className="text-xs text-blue-600 font-medium mt-1 bg-blue-50 px-2 py-1 rounded">⏰ 最短 {(delayMin / 1000).toFixed(0)}秒</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">投稿遅延最大（ms）</label>
-                  <input type="number" value={delayMax} onChange={(e) => setDelayMax(Number(e.target.value))} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <p className="text-xs text-blue-600 font-medium mt-1 bg-blue-50 px-2 py-1 rounded">⏰ 最長 {(delayMax / 1000).toFixed(0)}秒</p>
-                </div>
-              </div>
-            </div>
-
-            {/* 介入確率設定 - 簡略化 */}
-            <div className="bg-white rounded-xl p-5 shadow-md border-2 border-purple-200">
-              <h4 className="text-sm font-bold text-gray-800 mb-4 pb-2 border-b-2 border-purple-300 flex items-center gap-2">
-                <span>🎲</span> AI介入確率（簡易設定）
-              </h4>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">全体的な介入頻度</label>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="1" 
-                    step="0.1" 
-                    value={probSolo} 
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setProbSolo(val);
-                      setProbSilence(val * 0.7);
-                      setProbFragile(val * 0.3);
-                      setProbFlow(val * 0.1);
-                    }}
-                    className="w-full h-3 bg-purple-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-xs text-gray-600 mt-2">
-                    <span>低頻度</span>
-                    <span className="font-bold text-purple-600">{(probSolo * 100).toFixed(0)}%</span>
-                    <span>高頻度</span>
-                  </div>
-                  <div className="mt-3 bg-purple-50 rounded-lg p-3 border border-purple-200">
-                    <p className="text-xs text-gray-700 mb-2 font-semibold">📊 自動調整される確率:</p>
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between"><span>SOLO（独り言）:</span><span className="font-mono">{(probSolo * 100).toFixed(0)}%</span></div>
-                      <div className="flex justify-between"><span>SILENCE（静寂）:</span><span className="font-mono">{(probSilence * 100).toFixed(0)}%</span></div>
-                      <div className="flex justify-between"><span>FRAGILE（不安定）:</span><span className="font-mono">{(probFragile * 100).toFixed(0)}%</span></div>
-                      <div className="flex justify-between"><span>FLOW（会話活発）:</span><span className="font-mono">{(probFlow * 100).toFixed(0)}%</span></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* GPTパラメータ設定 */}
-            <div className="bg-white rounded-xl p-5 shadow-md border-2 border-indigo-200">
-              <h4 className="text-sm font-bold text-gray-800 mb-4 pb-2 border-b-2 border-indigo-300 flex items-center gap-2">
-                <span>🧠</span> GPT応答パラメータ
-              </h4>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">Temperature（創造性）</label>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="2" 
-                    step="0.1" 
-                    value={gptTemperature} 
-                    onChange={(e) => setGptTemperature(Number(e.target.value))}
-                    className="w-full h-3 bg-indigo-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-xs text-gray-600 mt-2">
-                    <span>保守的</span>
-                    <span className="font-bold text-indigo-600">{gptTemperature.toFixed(1)}</span>
-                    <span>創造的</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 bg-gray-50 px-2 py-1 rounded">💡 高いほど多様な応答、低いほど一貫した応答</p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">Presence Penalty（話題の多様性）</label>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="2" 
-                    step="0.1" 
-                    value={gptPresencePenalty} 
-                    onChange={(e) => setGptPresencePenalty(Number(e.target.value))}
-                    className="w-full h-3 bg-indigo-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-xs text-gray-600 mt-2">
-                    <span>同じ話題</span>
-                    <span className="font-bold text-indigo-600">{gptPresencePenalty.toFixed(1)}</span>
-                    <span>新しい話題</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 bg-gray-50 px-2 py-1 rounded">💡 高いほど新しい話題を導入しやすい</p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">Frequency Penalty（繰り返し抑制）</label>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="2" 
-                    step="0.1" 
-                    value={gptFrequencyPenalty} 
-                    onChange={(e) => setGptFrequencyPenalty(Number(e.target.value))}
-                    className="w-full h-3 bg-indigo-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-xs text-gray-600 mt-2">
-                    <span>繰り返しOK</span>
-                    <span className="font-bold text-indigo-600">{gptFrequencyPenalty.toFixed(1)}</span>
-                    <span>繰り返し回避</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 bg-gray-50 px-2 py-1 rounded">💡 高いほど同じ単語の繰り返しを避ける</p>
-                </div>
-
-                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg p-4 border-2 border-indigo-200 mt-4">
-                  <h5 className="text-xs font-bold text-gray-800 mb-2 flex items-center gap-1"><span>💡</span> 推奨設定</h5>
-                  <ul className="text-xs text-gray-600 space-y-1.5">
-                    {['Temperature: 0.8-1.2', 'Presence: 0.5-0.8', 'Frequency: 0.5-0.8'].map((tip) => (
-                      <li key={tip} className="flex items-start gap-2"><span className="text-green-500">✓</span><span>{tip}</span></li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* その他設定 */}
-            <div className="bg-white rounded-xl p-5 shadow-md border-2 border-green-200">
-              <h4 className="text-sm font-bold text-gray-800 mb-4 pb-2 border-b-2 border-green-300 flex items-center gap-2">
-                <span>🎚️</span> その他の制限
-              </h4>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">最大AI密度</label>
-                  <input type="number" step="0.05" min="0" max="1" value={maxAIDensity} onChange={(e) => setMaxAIDensity(Number(e.target.value))} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-                  <div className="mt-2 bg-green-100 rounded-full h-3 overflow-hidden shadow-inner">
-                    <div className="bg-gradient-to-r from-green-400 to-green-600 h-full transition-all" style={{ width: `${maxAIDensity * 100}%` }}></div>
-                  </div>
-                  <p className="text-xs text-green-600 font-medium mt-1 bg-green-50 px-2 py-1 rounded">📊 最大 {(maxAIDensity * 100).toFixed(0)}%</p>
-                  <p className="text-xs text-gray-500 mt-1 bg-gray-50 px-2 py-1 rounded">現在: {(currentAIDensity * 100).toFixed(1)}%</p>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-2">最大応答文字数</label>
-                  <input type="number" value={maxResponseLength} onChange={(e) => setMaxResponseLength(Number(e.target.value))} className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-                  <p className="text-xs text-green-600 font-medium mt-1 bg-green-50 px-2 py-1 rounded">📝 最大 {maxResponseLength}文字</p>
-                </div>
-                <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-4 border-2 border-blue-200 mt-6">
-                  <h5 className="text-xs font-bold text-gray-800 mb-2 flex items-center gap-1"><span>💡</span> 推奨設定</h5>
-                  <ul className="text-xs text-gray-600 space-y-1.5">
-                    {['AI密度: 10-20%', 'クールダウン: 5-15分', '応答文字数: 5-15文字', 'SOLO確率: 40-60%'].map((tip) => (
-                      <li key={tip} className="flex items-start gap-2"><span className="text-green-500">✓</span><span>{tip}</span></li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="mt-4 grid sm:grid-cols-2 gap-3">
+          <Slider
+            label="AI発言の上限比率"
+            hint={`全体のこの割合を超えるとAIは黙る（いま ${Math.round(currentAIDensity * 100)}%）`}
+            value={settings.max_ai_density}
+            onChange={(v) => update('max_ai_density', v)}
+          />
+          <Number
+            label="連続発言の間隔（分）"
+            hint="同じAIが次に喋るまでの最短〜最長"
+            value={Math.round(settings.cooldown_min / 60000)}
+            max={120}
+            onChange={(v) => {
+              update('cooldown_min', v * 60000);
+              if (settings.cooldown_max < v * 60000) update('cooldown_max', v * 60000 * 3);
+            }}
+            suffix={`〜 ${Math.round(settings.cooldown_max / 60000)}分`}
+          />
         </div>
-      )}
+      </Section>
 
-      {(showPromptEditor || showAdvancedSettings) && (
-        <div className="flex justify-end pt-4 border-t-2 border-gray-200 mt-4">
-          <button onClick={saveAISettings} disabled={isSaving} className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-300 disabled:to-gray-300 transition-all font-bold text-sm w-full sm:w-auto shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none">
-            {isSaving ? '💾 保存中...' : '💾 すべて保存'}
-          </button>
+      <Section
+        title="AIの人口"
+        note="固定のキャラを並べるのをやめ、人が増えたらAIも増える形にしました。人が2人の板にAIが10体いると場が人工的に見え、人が増えた時にAIが1体では静かすぎるためです。減ることはありません（過去の発言の持ち主が消えると会話が読めなくなるため）。"
+      >
+        <label className="flex items-center gap-2 mb-3 text-[13px] mz-ink">
+          <input
+            type="checkbox"
+            checked={settings.ai_auto_populate}
+            onChange={(e) => update('ai_auto_populate', e.target.checked)}
+          />
+          人数に応じてAIを自動で増やす
+        </label>
+
+        <div className="grid sm:grid-cols-3 gap-3">
+          <Number
+            label="何人につき1体"
+            hint="直近1時間の利用者数で計算"
+            value={settings.ai_users_per_character}
+            min={1}
+            max={20}
+            onChange={(v) => update('ai_users_per_character', v)}
+          />
+          <Number
+            label="最低でも住む数"
+            hint="誰もいなくても場を保つ数"
+            value={settings.ai_min_characters}
+            min={0}
+            max={10}
+            onChange={(v) => update('ai_min_characters', v)}
+          />
+          <Number
+            label="増やす上限"
+            hint="これ以上は増えない"
+            value={settings.ai_max_characters}
+            min={1}
+            max={50}
+            onChange={(v) => update('ai_max_characters', v)}
+          />
         </div>
-      )}
+      </Section>
+
+      <Section title="言葉づかい" note="生成される発言そのものの調整です。">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Number
+            label="発言の長さ上限（文字）"
+            hint="掲示板なので短いほど馴染む"
+            value={settings.max_response_length}
+            min={5}
+            max={200}
+            onChange={(v) => update('max_response_length', v)}
+          />
+          <Slider
+            label="ばらつき"
+            hint="高いほど予想外のことを言う"
+            value={settings.gpt_temperature}
+            max={2}
+            onChange={(v) => update('gpt_temperature', v)}
+          />
+        </div>
+
+        <label className="block mt-3">
+          <span className="text-[12px] font-bold mz-ink">全AI共通の土台プロンプト</span>
+          <span className="block text-[11px] mz-ink-faint mb-1">
+            各AIの性格はこの上に乗ります。板の話題は自動で追記されます。
+          </span>
+          <textarea
+            value={settings.system_prompt}
+            onChange={(e) => update('system_prompt', e.target.value)}
+            rows={6}
+            className="w-full rounded border mz-border-strong px-3 py-2 text-[13px] focus:outline-none"
+          />
+        </label>
+      </Section>
+
+      <div className="sticky bottom-0 py-3 mz-surface border-t mz-border-strong flex items-center gap-3">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="px-5 py-2 rounded font-bold text-[14px] disabled:opacity-40"
+          style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
+        >
+          {saving ? '保存中…' : '保存する'}
+        </button>
+        {saved && <span className="text-[12px] mz-accent">保存しました</span>}
+        {error && <span className="text-[12px]" style={{ color: 'var(--mz-danger)' }}>{error}</span>}
+      </div>
     </div>
+  );
+}
+
+function Section({
+  title,
+  note,
+  children,
+}: {
+  title: string;
+  note?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded border mz-border-strong mz-surface p-4">
+      <h3 className="font-bold mz-ink text-[15px]">{title}</h3>
+      {note && <p className="text-[11px] mz-ink-sub mt-1 mb-3 leading-relaxed">{note}</p>}
+      {children}
+    </section>
+  );
+}
+
+function Slider({
+  label,
+  hint,
+  value,
+  onChange,
+  max = 1,
+}: {
+  label: string;
+  hint?: string;
+  value: number;
+  onChange: (v: number) => void;
+  max?: number;
+}) {
+  return (
+    <label className="block rounded border mz-border p-3">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[12px] font-bold mz-ink">{label}</span>
+        <span className="mz-mono text-[13px] mz-accent">
+          {max === 1 ? `${Math.round(value * 100)}%` : value.toFixed(2)}
+        </span>
+      </div>
+      {hint && <p className="text-[10px] mz-ink-faint mt-0.5">{hint}</p>}
+      <input
+        type="range"
+        min={0}
+        max={max}
+        step={max === 1 ? 0.05 : 0.1}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full mt-2"
+      />
+    </label>
+  );
+}
+
+function Number({
+  label,
+  hint,
+  value,
+  onChange,
+  min = 0,
+  max = 1000,
+  suffix,
+}: {
+  label: string;
+  hint?: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  suffix?: string;
+}) {
+  return (
+    <label className="block rounded border mz-border p-3">
+      <span className="text-[12px] font-bold mz-ink">{label}</span>
+      {hint && <p className="text-[10px] mz-ink-faint mt-0.5">{hint}</p>}
+      <div className="flex items-baseline gap-2 mt-2">
+        <input
+          type="number"
+          value={value}
+          min={min}
+          max={max}
+          onChange={(e) => onChange(parseInt(e.target.value, 10) || min)}
+          className="w-20 rounded border mz-border-strong px-2 py-1 mz-mono text-[14px] focus:outline-none"
+        />
+        {suffix && <span className="text-[11px] mz-ink-faint">{suffix}</span>}
+      </div>
+    </label>
   );
 }
