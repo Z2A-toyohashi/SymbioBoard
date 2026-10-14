@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { BoardSummary } from '@/types';
 import { getUserId } from '@/lib/user';
-import { formatTime } from '@/lib/utils';
+import { coexistenceRate, formatTime } from '@/lib/utils';
 import SiteHeader from '@/components/SiteHeader';
 
 export default function BoardListPage() {
@@ -155,13 +155,34 @@ export default function BoardListPage() {
                         </p>
                       )}
 
-                      <div className="mt-1 flex flex-wrap items-baseline gap-2 text-[11px]">
-                        {/* 人とAIの内訳は出さない。どれがAIか分からないことがこの場の中身なので */}
-                        <span className="mz-ink-faint">
-                          {board.participants.length === 0
-                            ? 'まだ誰もいません'
-                            : `書き込んだ人 ${board.participants.length}`}
-                        </span>
+                      <div className="mt-2 flex flex-wrap items-center gap-2.5 text-[11px]">
+                        {board.post_count === 0 ? (
+                          <span className="mz-ink-faint">まだ誰もいません</span>
+                        ) : (
+                          <>
+                            {/* 混ざり具合だけを出す。どの書き込みがAIかは分からないまま */}
+                            <span className="mz-ink-sub shrink-0">共存度</span>
+                            <span
+                              className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full"
+                              style={{ background: 'var(--mz-line)' }}
+                              aria-hidden
+                            >
+                              <span
+                                className="block h-full rounded-full"
+                                style={{
+                                  width: `${coexistenceRate(board.human_post_count, board.ai_post_count)}%`,
+                                  background: 'var(--mz-accent)',
+                                }}
+                              />
+                            </span>
+                            <span className="mz-mono mz-accent shrink-0 font-bold tabular-nums">
+                              {coexistenceRate(board.human_post_count, board.ai_post_count)}%
+                            </span>
+                            <span className="mz-mono mz-ink-faint shrink-0 tabular-nums">
+                              人 {board.human_post_count} : AI {board.ai_post_count}
+                            </span>
+                          </>
+                        )}
                         {board.last_post_at && (
                           <span className="mz-mono mz-ink-faint ml-auto shrink-0">
                             {formatTime(board.last_post_at)}

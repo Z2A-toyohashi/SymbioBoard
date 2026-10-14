@@ -11,7 +11,11 @@ import type { BoardSummary, Participant } from '@/types';
 export async function GET() {
   try {
     const [{ data: boards }, { data: posts }, { data: aiCharacters }] = await Promise.all([
-      supabase.from('boards').select('*').eq('archived', false).order('created_at', { ascending: true }),
+      supabase
+        .from('boards')
+        .select('*')
+        .eq('archived', false)
+        .order('created_at', { ascending: true }),
       supabase.from('posts').select('id, board_id, thread_id, author_id, author_type, created_at'),
       supabase.from('ai_characters').select('id, name'),
     ]);
@@ -39,10 +43,14 @@ export async function GET() {
         }))
         .sort((a, b) => b.post_count - a.post_count);
 
+      const aiPostCount = boardPosts.filter((p) => p.author_type === 'ai').length;
+
       return {
         ...board,
         thread_count: boardPosts.filter((p) => !p.thread_id).length,
         post_count: boardPosts.length,
+        human_post_count: boardPosts.length - aiPostCount,
+        ai_post_count: aiPostCount,
         last_post_at: boardPosts.length
           ? Math.max(...boardPosts.map((p) => p.created_at as number))
           : null,

@@ -1,23 +1,21 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import type { AIMood, Post } from '@/types';
+import type { Post } from '@/types';
 import { SPACE_STATE_LABEL } from '@/types';
+import { detectSpaceState } from '@/lib/ai-logic';
+import { coexistenceRate } from '@/lib/utils';
 
 /**
  * 共存度。
  *
- * この板で、いま人とAIがどれくらい混ざり合っているかを一つの数字で出す。
- * 中身は「次の書き込みが起きる見込み」で、場が静かなほど上がる。
+ * この板の書き込みが、人とAIでどれだけ釣り合っているかを示す。
+ * 半々なら100、どちらか一方しかいなければ0。
  *
- * 画面には「AI」と書かない。どれがAIの書き込みか分からないことが
- * この場の中身なので、計器がそれを明かしては意味がない。
+ * 内訳の件数までは出すが、どの書き込みがAIかは出さない。
+ * 「10件のうち3件はAIだが、どれかは分からない」という状態がこの場の中身。
  *
- * 押せる要素は置かない。読むだけの計器なので、開閉させると
- * 本文を読みにきた人の手を一度止めてしまう。
- *
- * 値は一度取れたら消さない。取得に失敗しても直前の値を出したままにする。
- * 計器が点いたり消えたりすると、場の状態ではなく通信の状態を見ることになる。
+ * 算出はすべて画面側で行う。投稿はすでに手元にあるので、
+ * 問い合わせを挟む理由がない。通信の都合で計器が消えることもなくなる。
  */
 interface CoexistenceMeterProps {
   posts: Post[];
@@ -26,40 +24,11 @@ interface CoexistenceMeterProps {
 const TICKS = 24;
 
 export default function CoexistenceMeter({ posts }: CoexistenceMeterProps) {
-  const [mood, setMood] = useState<AIMood | null>(null);
-  const postsRef = useRef(posts);
-  postsRef.current = posts;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const res = await fetch('/api/ai-status', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ posts: postsRef.current }),
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as AIMood;
-        if (!cancelled) setMood(data);
-      } catch {
-        // 取れなければ直前の値を残す
-      }
-    };
-
-    load();
-    const timer = setInterval(load, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-    // 投稿の変化は ref 越しに読む。配列が変わるたびに計測を止めないため
-  }, []);
-
-  const label = mood ? SPACE_STATE_LABEL[mood.state] : null;
-  const percent = mood ? Math.round(mood.probability * 100) : 0;
-  const lit = Math.round((percent / 100) * TICKS);
+  const aiCount = posts.filter((p) => p.author_type === 'ai').length;
+  const humanCount = posts.length - aiCount;
+  const rate = coexistenceRate(humanCount, aiCount);
+  const lit = Math.round((rate / 100) * TICKS);
+  const label = SPACE_STATE_LABEL[detectSpaceState(posts)];
 
   return (
     <div className="mz-chrome mz-border sticky top-14 z-20 border-b">
@@ -69,7 +38,7 @@ export default function CoexistenceMeter({ posts }: CoexistenceMeterProps) {
         </span>
 
         <span className="mz-mono mz-ink shrink-0 text-[19px] leading-none font-bold tabular-nums">
-          {mood ? percent : '–'}
+          {rate}
           <span className="mz-ink-faint ml-0.5 text-[12px] font-normal">%</span>
         </span>
 
@@ -95,14 +64,21 @@ export default function CoexistenceMeter({ posts }: CoexistenceMeterProps) {
           <span
             className="block h-full rounded-full"
             style={{
-              width: `${percent}%`,
+              width: `${rate}%`,
               background: 'var(--mz-accent)',
               transition: 'width 320ms ease-out',
             }}
           />
         </span>
 
-        {label && <span className="mz-ink-sub ml-auto shrink-0 text-[12px]">{label.name}</span>}
+        {/* 内訳。どれがAIかは分からないまま、混ざり具合だけが分かる */}
+        <span className="mz-mono mz-ink-sub ml-auto shrink-0 text-[12px] tabular-nums">
+          人 {humanCount}
+          <span className="mz-ink-faint mx-1">:</span>
+          AI {aiCount}
+        </span>
+
+        <span className="mz-ink-faint hidden shrink-0 text-[12px] sm:inline">{label.name}</span>
       </div>
     </div>
   );

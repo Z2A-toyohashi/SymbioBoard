@@ -13,6 +13,9 @@ export interface Board {
 export interface BoardSummary extends Board {
   thread_count: number;
   post_count: number;
+  /** 書き込みの内訳。どれがAIかは出さないが、何件かは出す */
+  human_post_count: number;
+  ai_post_count: number;
   last_post_at: number | null;
   participants: Participant[];
 }
@@ -60,18 +63,6 @@ export const SPACE_STATE_LABEL: Record<SpaceState, { name: string; hint: string 
   SOLO: { name: 'ひとりごと', hint: '返事がないまま置かれている' },
 };
 
-// 場の状態（画面に出す値。算出はAIの判定と同じ）
-export interface AIMood {
-  state: SpaceState;
-  probability: number;
-  density: number;
-  max_density: number;
-  ai_count: number;
-  eligible_count: number;
-  cooldown_remaining: number;
-  blocked_reason: string | null;
-}
-
 // AI介入確率
 export const AI_INTERVENTION_PROBABILITY: Record<SpaceState, number> = {
   FLOW: 0,
@@ -82,8 +73,21 @@ export const AI_INTERVENTION_PROBABILITY: Record<SpaceState, number> = {
 
 // ユーザーカラー（17色）
 export const USER_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
-  '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788',
-  '#E63946', '#A8DADC', '#F4A261', '#2A9D8F', '#E76F51',
-  '#8338EC', '#FB5607',
+  '#FF6B6B',
+  '#4ECDC4',
+  '#45B7D1',
+  '#FFA07A',
+  '#98D8C8',
+  '#F7DC6F',
+  '#BB8FCE',
+  '#85C1E2',
+  '#F8B739',
+  '#52B788',
+  '#E63946',
+  '#A8DADC',
+  '#F4A261',
+  '#2A9D8F',
+  '#E76F51',
+  '#8338EC',
+  '#FB5607',
 ];
