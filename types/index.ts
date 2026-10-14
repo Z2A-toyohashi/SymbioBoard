@@ -51,15 +51,16 @@ export interface Log {
 // 空間状態の型定義
 export type SpaceState = 'FLOW' | 'SILENCE' | 'FRAGILE' | 'SOLO';
 
-// 空間状態の日本語ラベル（画面表示用）
+// 場の状態の日本語ラベル（画面表示用）
+// 誰が書くかには触れない。人かAIかを画面から推測させないため。
 export const SPACE_STATE_LABEL: Record<SpaceState, { name: string; hint: string }> = {
-  FLOW: { name: 'にぎやか', hint: '会話が流れている。AIは口を挟みにくい' },
-  SILENCE: { name: 'しずか', hint: '止まっている。AIが話題を出しやすい' },
-  FRAGILE: { name: 'ゆらぎ', hint: 'どちらにも転ぶ。AIはたまに入る' },
-  SOLO: { name: 'ひとりごと', hint: '返事がない。AIが拾いにいく' },
+  FLOW: { name: 'にぎやか', hint: '会話が流れている。新しい話題は入りにくい' },
+  SILENCE: { name: 'しずか', hint: '止まっている。誰かが話題を出しやすい' },
+  FRAGILE: { name: 'ゆらぎ', hint: 'どちらにも転ぶ場面' },
+  SOLO: { name: 'ひとりごと', hint: '返事がないまま置かれている' },
 };
 
-// AIの空気の読み方（画面に出す状態）
+// 場の状態（画面に出す値。算出はAIの判定と同じ）
 export interface AIMood {
   state: SpaceState;
   probability: number;

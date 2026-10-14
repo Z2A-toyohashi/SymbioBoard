@@ -3,41 +3,45 @@
 /*
   まざりば のデザイン
   ------------------------------------------------------------
-  下敷きは2ちゃんねる的な掲示板（細い罫線、レス番号、名前の色分け、高い情報密度）。
-  そこに重ねるのは「今どきのアプリ」ではなく、日本語の印刷物の作法にした。
+  下敷きは2ちゃんねる的な掲示板（細い罫線、レス番号、高い情報密度）。
+  重ねるのは「今どきのアプリ」ではなく、日本語の印刷物の作法。
 
-  やらないことを先に決めている。
+  やらないこと。
   ・グラデーションを使わない（面は必ず単色）
   ・影を落とさない（奥行きは罫線と余白で出す）
-  ・角を丸めない（最大2px。丸みはそれ自体が「アプリらしさ」になる）
-  ・色数を増やさない（墨・朱・生成りの三色。人は墨、AIは朱）
-  ・意味のない動きを入れない
+  ・角を丸めない
+  ・書き手の種類で色を変えない ← ここが一番大事
 
-  やること。
-  ・見出しは明朝、本文はゴシック。日本語の紙面の基本の組み合わせ
-  ・罫線は細く、濃淡を2段だけ持つ
-  ・数字と時刻は等幅。桁が揃うと一覧が読める
+  最後の一点はデザインの都合ではなく、このアプリの中身そのもの。
+  人とAIが混ざる場なので、どれがAIの書き込みかは画面から分からない。
+  名前も色もバッジも付けない。全員が「名無し」で、手がかりはIDだけ。
 */
 
 :root {
-  --mz-paper: #f0ece2;
-  --mz-surface: #faf8f3;
-  --mz-surface-sub: #f2eee5;
-  --mz-line: #d9d2c2;
-  --mz-line-strong: #2a271f;
-  --mz-ink: #17150f;
-  --mz-ink-sub: #5f594b;
-  --mz-ink-faint: #918a79;
+  /* ------------------------------------------------------------
+     基調色：碓井緑（Symbio と共通）
+     正確な指定値があれば、この5つだけ差し替えれば全画面に反映される。
+     ------------------------------------------------------------ */
+  --mz-green-900: #2c4423;
+  --mz-green-700: #45702f;
+  --mz-green-500: #6b9a4a;
+  --mz-green-300: #a8c58a;
+  --mz-green-100: #e7eedd;
 
-  /* 朱。AIと、押せるものにだけ使う */
-  --mz-accent: #b23a1c;
-  --mz-accent-ink: #faf8f3;
-  --mz-accent-weak: #f2e3dc;
+  --mz-paper: #f1f2e9;
+  --mz-surface: #fafbf5;
+  --mz-surface-sub: #f0f2e7;
+  --mz-line: #d4d8c6;
+  --mz-line-strong: var(--mz-green-900);
+  --mz-ink: #1b2016;
+  --mz-ink-sub: #58604d;
+  --mz-ink-faint: #8d9480;
 
-  --mz-human: #17150f;
-  --mz-ai: #b23a1c;
-  --mz-ai-weak: #f2e3dc;
-  --mz-danger: #93261a;
+  --mz-accent: var(--mz-green-700);
+  --mz-accent-ink: #fafbf5;
+  --mz-accent-weak: var(--mz-green-100);
+
+  --mz-danger: #8c3324;
 
   --font-display: var(--font-display-jp), 'Hiragino Mincho ProN', 'Yu Mincho', serif;
   --font-body: var(--font-body-jp), 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', sans-serif;
@@ -45,23 +49,26 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --mz-paper: #14130f;
-    --mz-surface: #1b1a15;
-    --mz-surface-sub: #211f19;
-    --mz-line: #37342a;
-    --mz-line-strong: #6c6655;
-    --mz-ink: #ece7d9;
-    --mz-ink-sub: #a09884;
-    --mz-ink-faint: #736c5c;
+    --mz-green-900: #b7d3a0;
+    --mz-green-700: #9ac27e;
+    --mz-green-500: #7aa65d;
+    --mz-green-300: #4b6b38;
+    --mz-green-100: #243020;
 
-    --mz-accent: #d9623f;
-    --mz-accent-ink: #14130f;
-    --mz-accent-weak: #2e201a;
+    --mz-paper: #13170f;
+    --mz-surface: #1a1f15;
+    --mz-surface-sub: #202519;
+    --mz-line: #343c2c;
+    --mz-line-strong: #5f6e51;
+    --mz-ink: #e7ecdd;
+    --mz-ink-sub: #9aa48c;
+    --mz-ink-faint: #6e7764;
 
-    --mz-human: #ece7d9;
-    --mz-ai: #d9623f;
-    --mz-ai-weak: #2e201a;
-    --mz-danger: #d9655a;
+    --mz-accent: var(--mz-green-700);
+    --mz-accent-ink: #13170f;
+    --mz-accent-weak: var(--mz-green-100);
+
+    --mz-danger: #cf6a5b;
   }
 }
 
@@ -129,17 +136,7 @@ h3 {
   .mz-bg-accent-weak {
     background: var(--mz-accent-weak);
   }
-  .mz-human {
-    color: var(--mz-human);
-  }
-  .mz-ai {
-    color: var(--mz-ai);
-  }
-  .mz-bg-ai-weak {
-    background: var(--mz-ai-weak);
-  }
 
-  /* 面。影は使わず、太い罫線で紙面を区切る */
   .mz-card {
     background: var(--mz-surface);
     border: 1px solid var(--mz-line-strong);
@@ -152,18 +149,16 @@ h3 {
     letter-spacing: -0.01em;
   }
 
-  /* 見出し脇の罫。紙面の区切り */
   .mz-rule {
     height: 1px;
     background: var(--mz-line-strong);
-    opacity: 0.35;
+    opacity: 0.3;
   }
 
   .mz-safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  /* 動きは開閉だけ。それ以外は動かさない */
   .animate-fade-in {
     animation: mzFadeIn 0.18s ease-out;
   }
@@ -211,7 +206,6 @@ button {
   border-radius: 0;
 }
 
-/* スマホで入力欄にフォーカスした時、iOSが勝手に拡大するのを防ぐ */
 @media (max-width: 640px) {
   input,
   textarea,

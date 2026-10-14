@@ -15,7 +15,6 @@ interface PostInputProps {
   replyTo?: string;
   replyToPost?: Post;
   onCancel?: () => void;
-  aiNames?: Record<string, string>;
 }
 
 export default function PostInput({
@@ -24,7 +23,6 @@ export default function PostInput({
   replyTo,
   replyToPost,
   onCancel,
-  aiNames = {},
 }: PostInputProps) {
   const [content, setContent] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -168,114 +166,108 @@ export default function PostInput({
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 mz-safe-bottom">
       <div className="border-t-2 mz-border-strong mz-surface">
-        <div className="max-w-4xl mx-auto px-2.5 sm:px-4">
-          {replyTo && replyToPost && (
-            <div className="flex items-center gap-2 py-2 border-b mz-border text-[12px] animate-fade-in">
-              <span
-                className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold border"
-                style={{ color: 'var(--mz-accent)', borderColor: 'var(--mz-accent)' }}
-              >
-                返信先
-              </span>
-              <span
-                className="font-bold shrink-0"
-                style={{
-                  color: replyToPost.author_type === 'ai' ? 'var(--mz-ai)' : 'var(--mz-human)',
-                }}
-              >
-                {replyToPost.author_type === 'ai'
-                  ? aiNames[replyToPost.author_id] || 'AI'
-                  : '名無し'}
-              </span>
-              <span className="mz-ink-sub truncate flex-1 min-w-0">{replyToPost.content}</span>
-              {onCancel && (
+        <div className="mx-auto max-w-6xl px-2.5 sm:px-4 lg:grid lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-6">
+          <div className="hidden lg:block" />
+          <div>
+            {replyTo && replyToPost && (
+              <div className="flex items-center gap-2 py-2 border-b mz-border text-[12px] animate-fade-in">
+                <span
+                  className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold border"
+                  style={{ color: 'var(--mz-accent)', borderColor: 'var(--mz-accent)' }}
+                >
+                  返信先
+                </span>
+                <span className="mz-ink font-bold shrink-0">名無し</span>
+                <span className="mz-ink-sub truncate flex-1 min-w-0">{replyToPost.content}</span>
+                {onCancel && (
+                  <button
+                    onClick={onCancel}
+                    className="shrink-0 w-6 h-6 border mz-border mz-ink-faint"
+                    aria-label="返信をやめる"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            )}
+
+            {imagePreview && (
+              <div className="pt-2 relative inline-block animate-fade-in">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imagePreview} alt="プレビュー" className="max-h-28 border mz-border" />
                 <button
-                  onClick={onCancel}
-                  className="shrink-0 w-6 h-6 border mz-border mz-ink-faint"
-                  aria-label="返信をやめる"
+                  onClick={() => {
+                    setImagePreview(null);
+                    setImageFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="absolute top-3 right-1 w-6 h-6 bg-black/70 text-white text-xs"
                 >
                   ✕
                 </button>
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {imagePreview && (
-            <div className="pt-2 relative inline-block animate-fade-in">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imagePreview} alt="プレビュー" className="max-h-28 border mz-border" />
+            <div className="flex items-end gap-1.5 py-2.5">
               <button
-                onClick={() => {
-                  setImagePreview(null);
-                  setImageFile(null);
-                  if (fileInputRef.current) fileInputRef.current.value = '';
-                }}
-                className="absolute top-3 right-1 w-6 h-6 bg-black/70 text-white text-xs"
+                onMouseDown={startRecording}
+                onMouseUp={stopRecording}
+                onMouseLeave={stopRecording}
+                onTouchStart={startRecording}
+                onTouchEnd={stopRecording}
+                className={`shrink-0 w-10 h-10 border grid place-items-center text-[15px] transition-all ${
+                  isRecording ? 'opacity-80' : ''
+                }`}
+                style={
+                  isRecording
+                    ? { background: 'var(--mz-ai)', color: '#fff', borderColor: 'var(--mz-ai)' }
+                    : { borderColor: 'var(--mz-line-strong)', color: 'var(--mz-ink-sub)' }
+                }
+                title="長押しで録音して文字にする"
+                aria-label="音声入力"
               >
-                ✕
+                ◉
+              </button>
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="shrink-0 w-10 h-10 border mz-border-strong mz-ink-sub grid place-items-center text-[15px] hover:mz-bg-accent-weak transition-colors"
+                title="画像を選ぶ"
+                aria-label="画像を添付"
+              >
+                ▣
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,image/heic,image/heif"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={() => setExpanded(true)}
+                placeholder={replyTo ? '返信を書く' : placeholder}
+                rows={expanded ? 3 : 1}
+                className="flex-1 min-w-0 resize-none border mz-border-strong px-3.5 py-2.5 text-[15px] leading-relaxed focus:outline-none transition-all"
+              />
+
+              <button
+                onClick={handleSubmit}
+                disabled={!canSend}
+                className="shrink-0 h-10 px-5 mz-bg-accent font-bold text-[14px] disabled:opacity-35 transition-all"
+              >
+                {isUploading ? '送信中' : '書く'}
               </button>
             </div>
-          )}
 
-          <div className="flex items-end gap-1.5 py-2.5">
-            <button
-              onMouseDown={startRecording}
-              onMouseUp={stopRecording}
-              onMouseLeave={stopRecording}
-              onTouchStart={startRecording}
-              onTouchEnd={stopRecording}
-              className={`shrink-0 w-10 h-10 border grid place-items-center text-[15px] transition-all ${
-                isRecording ? 'opacity-80' : ''
-              }`}
-              style={
-                isRecording
-                  ? { background: 'var(--mz-ai)', color: '#fff', borderColor: 'var(--mz-ai)' }
-                  : { borderColor: 'var(--mz-line-strong)', color: 'var(--mz-ink-sub)' }
-              }
-              title="長押しで録音して文字にする"
-              aria-label="音声入力"
-            >
-              ◉
-            </button>
-
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="shrink-0 w-10 h-10 border mz-border-strong mz-ink-sub grid place-items-center text-[15px] hover:mz-bg-accent-weak transition-colors"
-              title="画像を選ぶ"
-              aria-label="画像を添付"
-            >
-              ▣
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,image/heic,image/heif"
-              onChange={handleImageSelect}
-              className="hidden"
-            />
-
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setExpanded(true)}
-              placeholder={replyTo ? '返信を書く' : placeholder}
-              rows={expanded ? 3 : 1}
-              className="flex-1 min-w-0 resize-none border mz-border-strong px-3.5 py-2.5 text-[15px] leading-relaxed focus:outline-none transition-all"
-            />
-
-            <button
-              onClick={handleSubmit}
-              disabled={!canSend}
-              className="shrink-0 h-10 px-5 mz-bg-accent font-bold text-[14px] disabled:opacity-35 transition-all"
-            >
-              {isUploading ? '送信中' : '書く'}
-            </button>
+            {expanded && (
+              <p className="pb-2 text-[10px] mz-ink-faint">Cmd / Ctrl + Enter でも投稿できます</p>
+            )}
           </div>
-
-          {expanded && (
-            <p className="pb-2 text-[10px] mz-ink-faint">Cmd / Ctrl + Enter でも投稿できます</p>
-          )}
         </div>
       </div>
     </div>

@@ -76,19 +76,19 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
   return (
     <div className="space-y-4">
       <Section
-        title="AIの口の出し方"
-        note="場の空気ごとに、AIが発言を試みる確率です。この数字は利用者側のメーターにもそのまま出ます。"
+        title="AIの発言しやすさ"
+        note="場の空気ごとに、AIが発言を試みる確率です。この数字は利用者側の「ざわめき計」にもそのまま出ます（ただし利用者側ではAIとは書かれません）。"
       >
         <div className="grid sm:grid-cols-2 gap-3">
           <Slider
             label={`にぎやかな時（${SPACE_STATE_LABEL.FLOW.name}）`}
-            hint="会話が流れている。低いほど人の会話を邪魔しない"
+            hint="会話が流れている。低いほど人の会話に割り込まない"
             value={settings.prob_flow}
             onChange={(v) => update('prob_flow', v)}
           />
           <Slider
             label={`静かな時（${SPACE_STATE_LABEL.SILENCE.name}）`}
-            hint="誰も書いていない。高いほどAIが口火を切る"
+            hint="誰も書いていない。高いほどAIが先に書き出す"
             value={settings.prob_silence}
             onChange={(v) => update('prob_silence', v)}
           />
@@ -100,7 +100,7 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
           />
           <Slider
             label={`返事がない時（${SPACE_STATE_LABEL.SOLO.name}）`}
-            hint="独り言が放置されている。高いほど拾いにいく"
+            hint="独り言が放置されている。高いほどAIが応える"
             value={settings.prob_solo}
             onChange={(v) => update('prob_solo', v)}
           />

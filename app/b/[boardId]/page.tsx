@@ -9,7 +9,8 @@ import { randomDelay } from '@/lib/utils';
 import PostItem from '@/components/PostItem';
 import PostInput from '@/components/PostInput';
 import SiteHeader from '@/components/SiteHeader';
-import AIMeter from '@/components/AIMeter';
+import BuzzMeter from '@/components/BuzzMeter';
+import BoardRail from '@/components/BoardRail';
 
 export default function BoardPage() {
   const params = useParams<{ boardId: string }>();
@@ -17,7 +18,6 @@ export default function BoardPage() {
 
   const [board, setBoard] = useState<Board | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [aiNames, setAiNames] = useState<Record<string, string>>({});
   const [userId, setUserId] = useState('');
   const [replyTo, setReplyTo] = useState<string | undefined>();
   const [replyToPost, setReplyToPost] = useState<Post | undefined>();
@@ -44,20 +44,10 @@ export default function BoardPage() {
         body: JSON.stringify({ userId: id }),
       }).catch(() => {});
 
-      const [boardRes, charRes] = await Promise.all([
-        fetch(`/api/boards/${boardId}`),
-        fetch('/api/ai-characters'),
-      ]);
-
+      const boardRes = await fetch(`/api/boards/${boardId}`);
       if (boardRes.ok) {
         const data = await boardRes.json();
         setBoard(data.board);
-      }
-      if (charRes.ok) {
-        const data = await charRes.json();
-        const map: Record<string, string> = {};
-        for (const c of data.characters || []) map[c.id] = c.name;
-        setAiNames(map);
       }
 
       await fetchPosts();
@@ -78,7 +68,7 @@ export default function BoardPage() {
     };
   }, [boardId, fetchPosts]);
 
-  // AIの様子をうかがう。投稿が0件でも回すので、誰も書いていない板にAIが口火を切れる。
+  // 住人の様子をうかがう。投稿が0件でも回すので、誰も書いていない板でも会話が始まる。
   useEffect(() => {
     if (loading) return;
     const timer = setInterval(() => checkAIIntervention(), 30000);
@@ -181,57 +171,60 @@ export default function BoardPage() {
   return (
     <div className="min-h-screen">
       <SiteHeader userId={userId} boardTitle={board?.title || '…'} backHref="/" />
-      <AIMeter posts={posts} />
+      <BuzzMeter posts={posts} />
 
-      <main className="max-w-4xl mx-auto px-0 sm:px-4 py-0 sm:py-4 pb-36">
-        {board?.description && (
-          <p className="px-3.5 sm:px-4 py-2.5 text-[12px] mz-ink-sub sm:mb-3 sm:mz-card border-b sm:border-b mz-border">
-            {board.description}
-          </p>
-        )}
+      <div className="mx-auto max-w-6xl px-0 sm:px-4">
+        <div className="gap-6 lg:grid lg:grid-cols-[180px_minmax(0,1fr)]">
+          <BoardRail currentBoardId={boardId} />
 
-        {loading ? (
-          <div className="py-24 text-center mz-ink-faint text-sm">読み込み中…</div>
-        ) : topLevelPosts.length === 0 ? (
-          <div className="mx-3 sm:mx-0 mt-6 py-16 px-6 text-center mz-card">
-            <p className="mz-display text-base mz-ink-sub mb-1.5">まだ誰も書いていません</p>
-            <p className="mz-ink-faint text-[12px] leading-relaxed">
-              あなたが最初の1人になるか、
-              <br className="sm:hidden" />
-              AIが口火を切るのを待つこともできます
-            </p>
-            <p className="mt-3 text-[11px] mz-ink-faint">
-              上のメーターが満ちるほど、AIが喋り出しやすくなります
-            </p>
-          </div>
-        ) : (
-          <div className="sm:mz-card overflow-hidden border-y sm:border-0 mz-border">
-            {/* 2ちゃんねる同様、古い書き込みが上。スレが伸びるほど下に積まれる */}
-            {[...topLevelPosts]
-              .sort((a, b) => a.created_at - b.created_at)
-              .map((post, i) => (
-                <PostItem
-                  key={post.id}
-                  post={post}
-                  index={i + 1}
-                  replies={getReplies(post.id)}
-                  onReply={handleReply}
-                  currentUserId={userId}
-                  aiNames={aiNames}
-                  onReactionUpdate={fetchPosts}
-                  onDelete={async (postId) => {
-                    try {
-                      await fetch(`/api/posts?id=${postId}`, { method: 'DELETE' });
-                      await fetchPosts();
-                    } catch (error) {
-                      console.error('Failed to delete post:', error);
-                    }
-                  }}
-                />
-              ))}
-          </div>
-        )}
-      </main>
+          <main className="pt-0 pb-36 sm:pt-4">
+            {board?.description && (
+              <p className="mz-ink-sub mz-border border-b px-3.5 py-2.5 text-[12px] sm:px-0 sm:pt-0">
+                {board.description}
+              </p>
+            )}
+
+            {loading ? (
+              <div className="mz-ink-faint py-24 text-center text-sm">読み込み中…</div>
+            ) : topLevelPosts.length === 0 ? (
+              <div className="mz-card mx-3 mt-6 px-6 py-16 text-center sm:mx-0">
+                <p className="mz-display mz-ink-sub mb-1.5 text-base">まだ誰も書いていません</p>
+                <p className="mz-ink-faint text-[12px] leading-relaxed">
+                  最初の一行を置くと、この板が動きはじめます
+                </p>
+                <p className="mz-ink-faint mt-3 text-[11px]">
+                  上のざわめき計が満ちるほど、次の書き込みが起きやすくなります
+                </p>
+              </div>
+            ) : (
+              <div className="mz-border-strong overflow-hidden border-y sm:border">
+                {/* 2ちゃんねる同様、古い書き込みが上。スレが伸びるほど下に積まれる */}
+                {[...topLevelPosts]
+                  .sort((a, b) => a.created_at - b.created_at)
+                  .map((post, i) => (
+                    <PostItem
+                      key={post.id}
+                      post={post}
+                      index={i + 1}
+                      replies={getReplies(post.id)}
+                      onReply={handleReply}
+                      currentUserId={userId}
+                      onReactionUpdate={fetchPosts}
+                      onDelete={async (postId) => {
+                        try {
+                          await fetch(`/api/posts?id=${postId}`, { method: 'DELETE' });
+                          await fetchPosts();
+                        } catch (error) {
+                          console.error('Failed to delete post:', error);
+                        }
+                      }}
+                    />
+                  ))}
+              </div>
+            )}
+          </main>
+        </div>
+      </div>
 
       <PostInput
         onPost={handlePost}
@@ -241,7 +234,6 @@ export default function BoardPage() {
           setReplyTo(undefined);
           setReplyToPost(undefined);
         }}
-        aiNames={aiNames}
       />
     </div>
   );

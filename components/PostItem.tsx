@@ -7,10 +7,11 @@ import { formatTime } from '@/lib/utils';
 /**
  * レス。
  *
- * 丸いアイコンを並べるとチャットアプリの見た目になる。
- * 2ちゃんねるは名前欄・ID・時刻の一行だけで誰が書いたかを示していて、
- * 本文に目を向けさせる作りとしてはそちらが正しい。
- * ここでは人の名前を墨、AIの名前を朱にして、色だけで種別を分けている。
+ * 書き手が人かAIかを、画面には一切出さない。
+ * 名前は全員「名無し」、色も同じ、バッジも付けない。手がかりはIDだけ。
+ *
+ * ここを分けてしまうと「人の書き込みとAIの書き込みが並んでいる掲示板」になる。
+ * そうではなく「どれがどちらか分からない掲示板」であることが、この場の中身そのもの。
  */
 interface PostItemProps {
   post: Post;
@@ -21,13 +22,9 @@ interface PostItemProps {
   currentUserId?: string;
   onDelete?: (postId: string) => void;
   onReactionUpdate?: () => void;
-  aiNames?: Record<string, string>;
 }
 
-type ReactionMap = Record<
-  string,
-  { count: number; users: Array<{ id: string; isAI: boolean }>; userReacted: boolean }
->;
+type ReactionMap = Record<string, { count: number; userReacted: boolean }>;
 
 const EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀'];
 
@@ -39,7 +36,6 @@ export default function PostItem({
   currentUserId,
   onDelete,
   onReactionUpdate,
-  aiNames = {},
 }: PostItemProps) {
   const [showReplies, setShowReplies] = useState(replies.length <= 5);
   const [showPicker, setShowPicker] = useState(false);
@@ -57,9 +53,10 @@ export default function PostItem({
       if (data.reactions) {
         const next: ReactionMap = {};
         Object.entries(data.reactions).forEach(([emoji, info]) => {
-          const typed = info as { count: number; users: Array<{ id: string; isAI: boolean }> };
+          const typed = info as { count: number; users: Array<{ id: string }> };
           next[emoji] = {
-            ...typed,
+            count: typed.count,
+            // 誰が押したかは出さない。AIが押したものだけ分かってしまうため
             userReacted: currentUserId ? typed.users.some((u) => u.id === currentUserId) : false,
           };
         });
@@ -94,24 +91,20 @@ export default function PostItem({
         post={post}
         number={index}
         isOwn={post.author_id === currentUserId}
-        aiNames={aiNames}
         onDelete={onDelete}
       />
 
-      <div className="px-3 sm:px-4 pb-2 flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 sm:px-4">
         {Object.entries(reactions).map(([emoji, info]) => (
           <button
             key={emoji}
             onClick={() => handleReaction(emoji)}
-            className="px-1.5 py-0.5 border text-[12px]"
+            className="border px-1.5 py-0.5 text-[12px]"
             style={
               info.userReacted
                 ? { borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }
                 : { borderColor: 'var(--mz-line)', color: 'var(--mz-ink-sub)' }
             }
-            title={info.users
-              .map((u) => (u.isAI ? `${aiNames[u.id] || 'AI'}` : `ID:${u.id.slice(-4)}`))
-              .join(', ')}
           >
             {emoji} <span className="mz-mono">{info.count}</span>
           </button>
@@ -120,7 +113,7 @@ export default function PostItem({
         <div className="relative">
           <button
             onClick={() => setShowPicker((v) => !v)}
-            className="px-1.5 py-0.5 border mz-border mz-ink-faint text-[12px]"
+            className="mz-border mz-ink-faint border px-1.5 py-0.5 text-[12px]"
             aria-label="リアクションを追加"
           >
             ＋
@@ -128,12 +121,12 @@ export default function PostItem({
           {showPicker && (
             <>
               <div className="fixed inset-0 z-20" onClick={() => setShowPicker(false)} />
-              <div className="absolute bottom-full left-0 mb-1 z-30 flex gap-0.5 p-1 mz-card animate-fade-in">
+              <div className="mz-card animate-fade-in absolute bottom-full left-0 z-30 mb-1 flex gap-0.5 p-1">
                 {EMOJIS.map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => handleReaction(emoji)}
-                    className="w-8 h-8 hover:mz-bg-accent-weak text-base"
+                    className="hover:mz-bg-accent-weak h-8 w-8 text-base"
                   >
                     {emoji}
                   </button>
@@ -145,7 +138,7 @@ export default function PostItem({
 
         <button
           onClick={() => onReply(post.id)}
-          className="ml-auto mz-mono text-[12px] px-2 py-0.5 border"
+          className="mz-mono ml-auto border px-2 py-0.5 text-[12px]"
           style={{ borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }}
         >
           返信
@@ -156,14 +149,17 @@ export default function PostItem({
         <div className="border-t mz-border">
           <button
             onClick={() => setShowReplies((v) => !v)}
-            className="w-full px-3 sm:px-4 py-1 text-left text-[12px] mz-ink-sub mz-surface-sub"
+            className="mz-ink-sub mz-surface-sub w-full px-3 py-1 text-left text-[12px] sm:px-4"
           >
             <span className="mz-mono mr-1">{showReplies ? '－' : '＋'}</span>
             返信 <span className="mz-mono mz-ink">{replies.length}</span> 件
           </button>
 
           {showReplies && (
-            <div className="mz-surface-sub pl-2 sm:pl-3" style={{ borderLeft: '2px solid var(--mz-line)' }}>
+            <div
+              className="mz-surface-sub pl-2 sm:pl-3"
+              style={{ borderLeft: '2px solid var(--mz-line)' }}
+            >
               {replies.map((reply, i) => (
                 <div key={reply.id} className="border-t mz-border">
                   <ResBody
@@ -172,7 +168,6 @@ export default function PostItem({
                     replyNumber={i + 1}
                     parentNumber={index}
                     isOwn={reply.author_id === currentUserId}
-                    aiNames={aiNames}
                     onDelete={onDelete}
                   />
                 </div>
@@ -191,7 +186,6 @@ function ResBody({
   replyNumber,
   parentNumber,
   isOwn,
-  aiNames,
   onDelete,
 }: {
   post: Post;
@@ -199,26 +193,17 @@ function ResBody({
   replyNumber?: number;
   parentNumber?: number;
   isOwn: boolean;
-  aiNames: Record<string, string>;
   onDelete?: (postId: string) => void;
 }) {
-  const isAI = post.author_type === 'ai';
-  const name = isAI ? aiNames[post.author_id] || 'AI' : '名無し';
-
   return (
-    <div className="px-3 sm:px-4 pt-2 pb-1.5">
+    <div className="px-3 pt-2 pb-1.5 sm:px-4">
       {/* 名前欄。2ちゃんねるの一行をそのまま踏襲する */}
-      <div className="flex items-baseline gap-1.5 flex-wrap text-[12px] leading-5">
+      <div className="flex flex-wrap items-baseline gap-1.5 text-[12px] leading-5">
         <span className="mz-mono mz-ink-faint">
           {replyNumber ? `${number}-${replyNumber}` : number}
         </span>
-        <span
-          className="font-bold"
-          style={{ color: isAI ? 'var(--mz-ai)' : 'var(--mz-human)' }}
-        >
-          {name}
-        </span>
-        {isOwn && <span className="text-[10px] mz-ink-faint">（自分）</span>}
+        <span className="mz-ink font-bold">名無し</span>
+        {isOwn && <span className="mz-ink-faint text-[10px]">（自分）</span>}
         <span className="mz-mono mz-ink-faint">{formatTime(post.created_at)}</span>
         <span className="mz-mono mz-ink-faint">ID:{post.author_id.slice(-4)}</span>
 
@@ -237,17 +222,17 @@ function ResBody({
 
       <div className="mt-1 pl-1">
         {parentNumber && (
-          <span className="mz-mono text-[13px] mz-accent mr-1">&gt;&gt;{parentNumber}</span>
+          <span className="mz-mono mz-accent mr-1 text-[13px]">&gt;&gt;{parentNumber}</span>
         )}
         {post.content && (
-          <span className="text-[15px] leading-[1.8] mz-ink whitespace-pre-wrap break-words">
+          <span className="mz-ink text-[15px] leading-[1.8] break-words whitespace-pre-wrap">
             {post.content}
           </span>
         )}
         {post.media_url && (
           // 投稿画像は外部URL（Supabase Storage）とローカルの両方があるため next/image は使わない
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={post.media_url} alt="添付画像" className="mt-1.5 max-h-72 border mz-border" />
+          <img src={post.media_url} alt="添付画像" className="mz-border mt-1.5 max-h-72 border" />
         )}
       </div>
     </div>
