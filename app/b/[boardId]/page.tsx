@@ -165,6 +165,14 @@ export default function BoardPage() {
   };
 
   const topLevelPosts = posts.filter((p) => !p.thread_id);
+
+  // 通し番号は書き込み順に振り、表示だけ新しい順にする。
+  // 並び順で番号が振り直されると、>>3 が別の投稿を指してしまう。
+  const numberedThreads = [...topLevelPosts]
+    .sort((a, b) => a.created_at - b.created_at)
+    .map((post, i) => ({ post, number: i + 1 }))
+    .reverse();
+
   const getReplies = (threadId: string) =>
     posts.filter((p) => p.thread_id === threadId).sort((a, b) => a.created_at - b.created_at);
 
@@ -199,28 +207,27 @@ export default function BoardPage() {
               </div>
             ) : (
               <div className="mz-card mt-0 overflow-hidden rounded-none border-x-0 sm:mt-4 sm:rounded-[10px] sm:border-x">
-                {/* 古い書き込みが上。スレが伸びるほど下に積まれる */}
-                {[...topLevelPosts]
-                  .sort((a, b) => a.created_at - b.created_at)
-                  .map((post, i) => (
-                    <PostItem
-                      key={post.id}
-                      post={post}
-                      index={i + 1}
-                      replies={getReplies(post.id)}
-                      onReply={handleReply}
-                      currentUserId={userId}
-                      onReactionUpdate={fetchPosts}
-                      onDelete={async (postId) => {
-                        try {
-                          await fetch(`/api/posts?id=${postId}`, { method: 'DELETE' });
-                          await fetchPosts();
-                        } catch (error) {
-                          console.error('Failed to delete post:', error);
-                        }
-                      }}
-                    />
-                  ))}
+                {/* 新しいスレッドが上。開いてすぐ最近の話が目に入る。
+                    通し番号は書き込み順のまま固定で、並べ替えても動かない */}
+                {numberedThreads.map(({ post, number }) => (
+                  <PostItem
+                    key={post.id}
+                    post={post}
+                    index={number}
+                    replies={getReplies(post.id)}
+                    onReply={handleReply}
+                    currentUserId={userId}
+                    onReactionUpdate={fetchPosts}
+                    onDelete={async (postId) => {
+                      try {
+                        await fetch(`/api/posts?id=${postId}`, { method: 'DELETE' });
+                        await fetchPosts();
+                      } catch (error) {
+                        console.error('Failed to delete post:', error);
+                      }
+                    }}
+                  />
+                ))}
               </div>
             )}
           </main>

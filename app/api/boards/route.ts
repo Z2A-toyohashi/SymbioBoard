@@ -58,8 +58,9 @@ export async function GET() {
       };
     });
 
-    // 動きがある板を上に出す。新しく立った板が埋もれないよう、投稿ゼロは作成順で末尾へ。
-    summaries.sort((a, b) => (b.last_post_at || 0) - (a.last_post_at || 0));
+    // 最終書き込みが古い板を上に出す。書き込みのない板は先頭に来るので、
+    // 立てたばかりの板が埋もれずに最初の一行を呼び込める。
+    summaries.sort((a, b) => (a.last_post_at || 0) - (b.last_post_at || 0));
 
     return NextResponse.json({ boards: summaries });
   } catch (error) {
