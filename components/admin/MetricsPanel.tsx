@@ -66,9 +66,7 @@ export default function MetricsPanel({ stats }: MetricsPanelProps) {
         <div className="mz-surface-sub border mz-border p-5 sm:p-6 ">
           <h3 className="text-xs sm:text-sm font-bold mz-ink-sub mb-3 sm:mb-4">AI密度</h3>
           <div className="text-center">
-            <div
-              className={`text-4xl sm:text-5xl font-bold mz-accent mb-2`}
-            >
+            <div className={`text-4xl sm:text-5xl font-bold mz-accent mb-2`}>
               {(stats.aiDensity * 100).toFixed(1)}%
             </div>
             <div className="text-xs sm:text-sm mz-ink-sub font-medium">
@@ -80,9 +78,7 @@ export default function MetricsPanel({ stats }: MetricsPanelProps) {
         <div className="mz-surface-sub border mz-border p-5 sm:p-6 ">
           <h3 className="text-xs sm:text-sm font-bold mz-ink-sub mb-3 sm:mb-4">空間状態</h3>
           <div className="text-center">
-            <div
-              className={`text-3xl sm:text-4xl font-bold mz-accent mb-2`}
-            >
+            <div className={`text-3xl sm:text-4xl font-bold mz-accent mb-2`}>
               {stats.spaceState}
             </div>
             <div className="text-xs sm:text-sm mz-ink-sub font-medium">

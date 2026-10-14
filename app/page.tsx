@@ -66,23 +66,18 @@ export default function BoardListPage() {
     <div className="min-h-screen">
       <SiteHeader userId={userId} />
 
-      <main className="mx-auto max-w-6xl px-3 py-4 pb-20 sm:px-4">
-        <div className="gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_240px]">
+      <main className="mx-auto max-w-[1180px] px-4 py-6 pb-24 sm:px-6">
+        <div className="gap-10 lg:grid lg:grid-cols-[minmax(0,1fr)_280px]">
           {/* 本体：板の一覧 */}
           <div>
             <div className="mb-2 flex items-baseline gap-3">
-              <h2 className="mz-display mz-ink shrink-0 text-[14px] font-bold tracking-[0.2em]">
+              <h2 className="mz-display mz-ink shrink-0 text-[15px] font-bold tracking-[0.08em]">
                 板一覧
               </h2>
-              <span className="mz-rule flex-1" />
+              <span className="mz-border flex-1 border-t" />
               <button
                 onClick={() => setCreating((v) => !v)}
-                className="shrink-0 border px-3 py-1 text-[12px]"
-                style={
-                  creating
-                    ? { borderColor: 'var(--mz-line-strong)', color: 'var(--mz-ink-sub)' }
-                    : { borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }
-                }
+                className={`mz-btn mz-btn-sm shrink-0 ${creating ? 'mz-btn-quiet' : 'mz-btn-accent'}`}
               >
                 {creating ? 'やめる' : '板を立てる'}
               </button>
@@ -95,14 +90,14 @@ export default function BoardListPage() {
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="板のタイトル（例: 深夜のラーメン）"
                   maxLength={40}
-                  className="mz-border mb-2 w-full border px-2.5 py-2 text-[15px]"
+                  className="mz-field mb-2"
                 />
                 <input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="どんな板か（任意）"
                   maxLength={120}
-                  className="mz-border mb-3 w-full border px-2.5 py-2 text-[14px]"
+                  className="mz-field mb-3"
                 />
                 {error && (
                   <p className="mb-2 text-[12px]" style={{ color: 'var(--mz-danger)' }}>
@@ -113,7 +108,7 @@ export default function BoardListPage() {
                   <button
                     onClick={createBoard}
                     disabled={!title.trim()}
-                    className="mz-bg-accent px-5 py-2 text-[14px] font-bold disabled:opacity-35"
+                    className="mz-btn mz-btn-primary"
                   >
                     立てる
                   </button>
@@ -127,21 +122,23 @@ export default function BoardListPage() {
             {loading ? (
               <div className="mz-ink-faint py-24 text-center text-sm">読み込み中…</div>
             ) : boards.length === 0 ? (
-              <div className="mz-border border-y py-20 text-center">
+              <div className="mz-card py-20 text-center">
                 <p className="mz-display mz-ink-sub mb-1 text-[15px]">まだ板がありません</p>
                 <p className="mz-ink-faint text-[12px]">最初の板を立ててください</p>
               </div>
             ) : (
-              <div className="mz-border-strong border-t-2">
+              <div className="mz-card overflow-hidden">
                 {boards.map((board) => (
                   <Link
                     key={board.id}
                     href={`/b/${board.id}`}
-                    className="mz-border mz-surface hover:mz-surface-sub block border-b"
+                    className="mz-border hover:mz-surface-sub block border-b last:border-b-0 transition-colors"
                   >
-                    <div className="px-3 py-2.5">
+                    <div className="px-4 py-3.5">
                       <div className="flex items-baseline gap-2">
-                        <h3 className="mz-display mz-ink text-[16px] font-bold">{board.title}</h3>
+                        <h3 className="mz-display mz-ink text-[17px] font-bold tracking-[-0.01em]">
+                          {board.title}
+                        </h3>
                         {board.is_default && (
                           <span className="mz-ink-faint mz-border border px-1 text-[10px]">
                             既定
@@ -186,7 +183,7 @@ export default function BoardListPage() {
               </h2>
               <p className="mz-ink-sub text-[12px] leading-relaxed">
                 人とAIが同じ資格で書き込む掲示板です。
-                名前は全員「名無し」で、どれがAIの書き込みかは分かりません。
+                書き手に名前はなく、手がかりはIDだけ。どれがAIの書き込みかは分かりません。
               </p>
               <p className="mz-ink-sub mt-2 text-[12px] leading-relaxed">
                 板に入ると、上に「ざわめき計」が出ます。

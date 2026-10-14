@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useRef, forwardRef, useImperativeHandle } from "react";
-import { createRecorder } from "@/lib/recorder";
-import { transcribeAudio } from "@/lib/whisper";
-import { analyzeImageWithAudio } from "@/lib/multimodal";
-import { saveRecord } from "@/lib/storage";
+import { useState, useRef, forwardRef, useImperativeHandle } from 'react';
+import { createRecorder } from '@/lib/recorder';
+import { transcribeAudio } from '@/lib/whisper';
+import { analyzeImageWithAudio } from '@/lib/multimodal';
+import { saveRecord } from '@/lib/storage';
 
 export interface RecorderHandle {
   startRecording: () => void;
@@ -68,7 +68,7 @@ const Recorder = forwardRef<RecorderHandle>((props, ref) => {
   const stopContinuousRecording = () => {
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
       mediaRecorderRef.current = null;
       audioChunksRef.current = [];
       setRecording(false);
@@ -80,18 +80,18 @@ const Recorder = forwardRef<RecorderHandle>((props, ref) => {
   // カメラのフレームをキャプチャ
   const captureFrame = async (): Promise<Blob | null> => {
     const video = cameraVideoRef.current;
-    
+
     if (!video) {
       console.error('カメラのvideoRefが設定されていません');
       return null;
     }
-    
+
     // モバイルでの準備状態を厳密にチェック
     if (video.readyState < 2) {
       console.error('カメラの準備ができていません (readyState:', video.readyState, ')');
       return null;
     }
-    
+
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       console.error('カメラの映像サイズが0です');
       return null;
@@ -107,34 +107,38 @@ const Recorder = forwardRef<RecorderHandle>((props, ref) => {
       width: video.videoWidth,
       height: video.videoHeight,
       readyState: video.readyState,
-      paused: video.paused
+      paused: video.paused,
     });
 
-    const canvas = document.createElement("canvas");
+    const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    const ctx = canvas.getContext("2d", { willReadFrequently: false });
+    const ctx = canvas.getContext('2d', { willReadFrequently: false });
     if (!ctx) {
       console.error('Canvas contextの取得に失敗');
       return null;
     }
 
     // 描画前に少し待つ（モバイル対応）
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     return new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((b) => {
-        if (b && b.size > 0) {
-          console.log('画像キャプチャ成功。サイズ:', b.size);
-          resolve(b);
-        } else {
-          console.error('画像キャプチャ失敗: Blobが空です');
-          reject(new Error('画像キャプチャに失敗しました'));
-        }
-      }, "image/jpeg", 0.95);
+      canvas.toBlob(
+        (b) => {
+          if (b && b.size > 0) {
+            console.log('画像キャプチャ成功。サイズ:', b.size);
+            resolve(b);
+          } else {
+            console.error('画像キャプチャ失敗: Blobが空です');
+            reject(new Error('画像キャプチャに失敗しました'));
+          }
+        },
+        'image/jpeg',
+        0.95
+      );
     });
   };
 
@@ -144,9 +148,9 @@ const Recorder = forwardRef<RecorderHandle>((props, ref) => {
       console.log('既に撮影処理中です');
       return;
     }
-    
+
     setCapturing(true);
-    
+
     try {
       console.log('撮影ボタン押下');
 
@@ -204,7 +208,7 @@ const Recorder = forwardRef<RecorderHandle>((props, ref) => {
       console.log('画像データ保存完了');
 
       console.log('撮影完了！');
-      
+
       // 撮影後も録音は継続（チャンクはリセットしない）
     } catch (err: any) {
       console.error('撮影エラー:', err);
@@ -223,7 +227,7 @@ const Recorder = forwardRef<RecorderHandle>((props, ref) => {
           <span className="text-sm font-semibold">録音中...</span>
         </div>
       )}
-      
+
       {/* 撮影処理中の表示 */}
       {capturing && (
         <div className="flex items-center gap-2 text-green-500">

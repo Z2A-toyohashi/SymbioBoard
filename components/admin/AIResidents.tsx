@@ -75,23 +75,15 @@ export default function AIResidents() {
   };
 
   return (
-    <section className="border mz-border-strong mz-surface p-4">
+    <section className="mz-card p-4 sm:p-5">
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <h3 className="font-bold mz-ink text-[15px]">AI住人</h3>
         <span className="mz-mono text-[12px] mz-ink-sub">{characters.length}体</span>
         <div className="ml-auto flex gap-2">
-          <button
-            onClick={populate}
-            disabled={busy}
-            className="text-[12px] px-3 py-1.5 border font-bold disabled:opacity-40"
-            style={{ borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }}
-          >
+          <button onClick={populate} disabled={busy} className="mz-btn mz-btn-sm mz-btn-accent">
             いま足りない分を補充
           </button>
-          <button
-            onClick={() => setAdding((v) => !v)}
-            className="text-[12px] px-3 py-1.5 border mz-border-strong mz-ink-sub"
-          >
+          <button onClick={() => setAdding((v) => !v)} className="mz-btn mz-btn-sm mz-btn-quiet">
             {adding ? 'やめる' : '手で足す'}
           </button>
         </div>
@@ -114,26 +106,25 @@ export default function AIResidents() {
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="名前（例: 夜更かしAI）"
-            className="w-full px-3 py-2 border mz-border-strong text-[14px] focus:outline-none"
+            className="mz-field"
           />
           <input
             value={form.personality}
             onChange={(e) => setForm({ ...form, personality: e.target.value })}
             placeholder="性格（例: 夜に元気になる）"
-            className="w-full px-3 py-2 border mz-border-strong text-[14px] focus:outline-none"
+            className="mz-field"
           />
           <textarea
             value={form.system_prompt}
             onChange={(e) => setForm({ ...form, system_prompt: e.target.value })}
             placeholder="このAIへの指示文"
             rows={3}
-            className="w-full px-3 py-2 border mz-border-strong text-[13px] focus:outline-none"
+            className="mz-field"
           />
           <button
             onClick={add}
             disabled={busy || !form.name || !form.personality || !form.system_prompt}
-            className="px-4 py-2 font-bold text-[13px] disabled:opacity-40"
-            style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
+            className="mz-btn mz-btn-primary"
           >
             追加する
           </button>

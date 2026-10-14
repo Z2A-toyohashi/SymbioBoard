@@ -87,7 +87,7 @@ export default function SettingsPage() {
         <section className="border mz-border-strong mz-surface p-4">
           <h2 className="font-bold mz-ink text-[15px] mb-1">このブラウザのあなた</h2>
           <p className="text-[12px] mz-ink-sub mb-3">
-            表示される名前は常に「名無し」です。書き込みの横に出る ID
+            この場に名前はありません。書き込みの横に出る ID
             だけが、同じ人かどうかの手がかりになります。
           </p>
           <div className="mz-mono text-lg mz-ink px-3 py-2 mz-surface-sub border mz-border inline-block">

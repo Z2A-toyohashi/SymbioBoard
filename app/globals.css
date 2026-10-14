@@ -3,18 +3,14 @@
 /*
   まざりば のデザイン
   ------------------------------------------------------------
-  下敷きは2ちゃんねる的な掲示板（細い罫線、レス番号、高い情報密度）。
-  重ねるのは「今どきのアプリ」ではなく、日本語の印刷物の作法。
+  構造の参照元は掲示板（板→スレッド→レス、通し番号、高い情報密度）。
+  仕上げの基準はAppleのヒューマンインターフェイスに置いている。
 
-  やらないこと。
-  ・グラデーションを使わない（面は必ず単色）
-  ・影を落とさない（奥行きは罫線と余白で出す）
-  ・角を丸めない
-  ・書き手の種類で色を変えない ← ここが一番大事
-
-  最後の一点はデザインの都合ではなく、このアプリの中身そのもの。
-  人とAIが混ざる場なので、どれがAIの書き込みかは画面から分からない。
-  名前も色もバッジも付けない。全員が「名無し」で、手がかりはIDだけ。
+  ・押せるものは必ず44px以上。押した瞬間に沈む（離した時ではなく）
+  ・浮いている面は半透明＋ぼかし。下の内容が透けて階層が分かる
+  ・文字は大きいほど字間を詰め、行間をきつくする（サイズ別の調整）
+  ・動きは120〜200ms。reduced-motion では動かさず不透明度だけ変える
+  ・色は碓井緑ひとつ。書き手が人かAIかで色を変えない（それがこの場の中身）
 */
 
 :root {
@@ -22,53 +18,64 @@
      基調色：碓井緑（Symbio と共通）
      正確な指定値があれば、この5つだけ差し替えれば全画面に反映される。
      ------------------------------------------------------------ */
-  --mz-green-900: #2c4423;
-  --mz-green-700: #45702f;
-  --mz-green-500: #6b9a4a;
-  --mz-green-300: #a8c58a;
-  --mz-green-100: #e7eedd;
+  --mz-green-900: #24401c;
+  --mz-green-700: #3d6b2b;
+  --mz-green-500: #5f9442;
+  --mz-green-300: #a3c589;
+  --mz-green-100: #e8efdf;
 
-  --mz-paper: #f1f2e9;
-  --mz-surface: #fafbf5;
-  --mz-surface-sub: #f0f2e7;
-  --mz-line: #d4d8c6;
-  --mz-line-strong: var(--mz-green-900);
-  --mz-ink: #1b2016;
-  --mz-ink-sub: #58604d;
-  --mz-ink-faint: #8d9480;
+  --mz-paper: #f4f5ef;
+  --mz-surface: #ffffff;
+  --mz-surface-sub: #f7f8f2;
+  --mz-line: #e0e3d8;
+  --mz-line-strong: #c7ccba;
+  --mz-ink: #1a1e16;
+  --mz-ink-sub: #5c6454;
+  --mz-ink-faint: #949b8b;
 
   --mz-accent: var(--mz-green-700);
-  --mz-accent-ink: #fafbf5;
+  --mz-accent-ink: #ffffff;
   --mz-accent-weak: var(--mz-green-100);
 
-  --mz-danger: #8c3324;
+  --mz-danger: #a33527;
+
+  /* 浮いている面。影は控えめに、輪郭は線で出す */
+  --mz-chrome: rgba(255, 255, 255, 0.78);
+  --mz-elev: 0 1px 2px rgba(26, 30, 22, 0.05), 0 8px 24px rgba(26, 30, 22, 0.06);
+
+  --mz-radius: 10px;
+  --mz-radius-sm: 7px;
 
   --font-display: var(--font-display-jp), 'Hiragino Mincho ProN', 'Yu Mincho', serif;
-  --font-body: var(--font-body-jp), 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', sans-serif;
+  --font-body:
+    var(--font-body-jp), -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --mz-green-900: #b7d3a0;
-    --mz-green-700: #9ac27e;
-    --mz-green-500: #7aa65d;
-    --mz-green-300: #4b6b38;
-    --mz-green-100: #243020;
+    --mz-green-900: #c3dbab;
+    --mz-green-700: #9ec47f;
+    --mz-green-500: #7ba75d;
+    --mz-green-300: #4d6b38;
+    --mz-green-100: #22301b;
 
-    --mz-paper: #13170f;
-    --mz-surface: #1a1f15;
-    --mz-surface-sub: #202519;
-    --mz-line: #343c2c;
-    --mz-line-strong: #5f6e51;
-    --mz-ink: #e7ecdd;
-    --mz-ink-sub: #9aa48c;
-    --mz-ink-faint: #6e7764;
+    --mz-paper: #101309;
+    --mz-surface: #191d14;
+    --mz-surface-sub: #1f2419;
+    --mz-line: #30372a;
+    --mz-line-strong: #454d3c;
+    --mz-ink: #eaefdf;
+    --mz-ink-sub: #9ca693;
+    --mz-ink-faint: #6e7765;
 
     --mz-accent: var(--mz-green-700);
-    --mz-accent-ink: #13170f;
+    --mz-accent-ink: #101309;
     --mz-accent-weak: var(--mz-green-100);
 
-    --mz-danger: #cf6a5b;
+    --mz-danger: #d4705f;
+
+    --mz-chrome: rgba(25, 29, 20, 0.76);
+    --mz-elev: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -80,22 +87,31 @@
 
 html {
   color-scheme: light dark;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background-color: var(--mz-paper);
   color: var(--mz-ink);
   font-family: var(--font-body);
+  font-size: 100%;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior-y: none;
 }
 
-h1,
+/* 大きい文字ほど字間を詰め、行間をきつくする */
+h1 {
+  font-family: var(--font-display);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
 h2,
 h3 {
   font-family: var(--font-display);
-  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
 @layer utilities {
@@ -137,22 +153,10 @@ h3 {
     background: var(--mz-accent-weak);
   }
 
-  .mz-card {
-    background: var(--mz-surface);
-    border: 1px solid var(--mz-line-strong);
-  }
-
-  /* 数字・時刻・IDに使う等幅 */
   .mz-mono {
-    font-family: 'SF Mono', 'Menlo', 'Consolas', 'Noto Sans Mono', ui-monospace, monospace;
+    font-family: 'SF Mono', 'Menlo', 'Consolas', ui-monospace, monospace;
     font-feature-settings: 'tnum' 1;
-    letter-spacing: -0.01em;
-  }
-
-  .mz-rule {
-    height: 1px;
-    background: var(--mz-line-strong);
-    opacity: 0.3;
+    letter-spacing: 0;
   }
 
   .mz-safe-bottom {
@@ -160,26 +164,145 @@ h3 {
   }
 
   .animate-fade-in {
-    animation: mzFadeIn 0.18s ease-out;
+    animation: mzFadeIn 0.16s ease-out;
   }
 
   @keyframes mzFadeIn {
     from {
       opacity: 0;
+      transform: translateY(4px);
     }
     to {
       opacity: 1;
+      transform: translateY(0);
     }
+  }
+}
+
+@layer components {
+  /* 面 ------------------------------------------------------- */
+  .mz-card {
+    background: var(--mz-surface);
+    border: 1px solid var(--mz-line);
+    border-radius: var(--mz-radius);
+  }
+
+  /* 上や下に浮いている帯。下の内容が透ける */
+  .mz-chrome {
+    background: var(--mz-chrome);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  /* 設定項目などの1区画 */
+  .mz-row {
+    border: 1px solid var(--mz-line);
+    border-radius: var(--mz-radius-sm);
+    padding: 0.75rem;
+    background: var(--mz-surface);
+  }
+
+  /* 押せるもの ----------------------------------------------- */
+  /* 高さは44px。押した瞬間に沈み、離すと戻る */
+  .mz-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4em;
+    min-height: 44px;
+    padding: 0 1.15rem;
+    border-radius: var(--mz-radius-sm);
+    border: 1px solid transparent;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+      transform 100ms ease-out,
+      background-color 120ms ease-out,
+      opacity 120ms ease-out;
+    touch-action: manipulation;
+  }
+  .mz-btn:active {
+    transform: scale(0.97);
+  }
+  .mz-btn:disabled {
+    opacity: 0.38;
+    cursor: default;
+    transform: none;
+  }
+
+  .mz-btn-primary {
+    background: var(--mz-accent);
+    color: var(--mz-accent-ink);
+  }
+  .mz-btn-quiet {
+    background: transparent;
+    border-color: var(--mz-line-strong);
+    color: var(--mz-ink);
+  }
+  .mz-btn-quiet:active {
+    background: var(--mz-accent-weak);
+  }
+  .mz-btn-accent {
+    background: var(--mz-accent-weak);
+    color: var(--mz-accent);
+    border-color: transparent;
+  }
+
+  /* 小さめだが指で押せる最小寸法は守る */
+  .mz-btn-sm {
+    min-height: 36px;
+    padding: 0 0.85rem;
+    font-size: 13px;
+  }
+
+  .mz-stepper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--mz-line-strong);
+    border-radius: var(--mz-radius-sm);
+    background: var(--mz-surface);
+    color: var(--mz-ink);
+    font-size: 19px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 100ms ease-out, background-color 120ms ease-out;
+    touch-action: manipulation;
+  }
+  .mz-stepper:active {
+    transform: scale(0.94);
+    background: var(--mz-accent-weak);
+  }
+
+  /* 入力 ------------------------------------------------------ */
+  .mz-field {
+    width: 100%;
+    min-height: 44px;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--mz-line-strong);
+    border-radius: var(--mz-radius-sm);
+    background: var(--mz-surface);
+    color: var(--mz-ink);
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.6;
+    transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+  }
+  .mz-field:focus {
+    outline: none;
+    border-color: var(--mz-accent);
+    box-shadow: 0 0 0 3px var(--mz-accent-weak);
   }
 }
 
 input,
 textarea,
 select {
-  background: var(--mz-surface);
-  color: var(--mz-ink);
   font-family: inherit;
-  border-radius: 0;
 }
 
 input::placeholder,
@@ -187,25 +310,18 @@ textarea::placeholder {
   color: var(--mz-ink-faint);
 }
 
-input:focus,
-textarea:focus {
-  border-color: var(--mz-accent);
-  outline: none;
-}
-
 input[type='range'] {
   accent-color: var(--mz-accent);
+  height: 24px;
 }
 input[type='checkbox'] {
   accent-color: var(--mz-accent);
-  width: 15px;
-  height: 15px;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
 }
 
-button {
-  border-radius: 0;
-}
-
+/* スマホで入力欄にフォーカスした時、iOSが勝手に拡大するのを防ぐ */
 @media (max-width: 640px) {
   input,
   textarea,
@@ -217,4 +333,38 @@ button {
 ::selection {
   background: var(--mz-accent-weak);
   color: var(--mz-ink);
+}
+
+/* 配慮設定 --------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .mz-btn:active,
+  .mz-stepper:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .mz-chrome {
+    background: var(--mz-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --mz-line: var(--mz-line-strong);
+    --mz-ink-sub: var(--mz-ink);
+  }
+  .mz-chrome {
+    background: var(--mz-surface);
+    backdrop-filter: none;
+  }
 }

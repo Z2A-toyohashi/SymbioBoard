@@ -9,7 +9,7 @@ import { randomDelay } from '@/lib/utils';
 import PostItem from '@/components/PostItem';
 import PostInput from '@/components/PostInput';
 import SiteHeader from '@/components/SiteHeader';
-import BuzzMeter from '@/components/BuzzMeter';
+import CoexistenceMeter from '@/components/CoexistenceMeter';
 import BoardRail from '@/components/BoardRail';
 
 export default function BoardPage() {
@@ -171,34 +171,35 @@ export default function BoardPage() {
   return (
     <div className="min-h-screen">
       <SiteHeader userId={userId} boardTitle={board?.title || '…'} backHref="/" />
-      <BuzzMeter posts={posts} />
+      <CoexistenceMeter posts={posts} />
 
-      <div className="mx-auto max-w-6xl px-0 sm:px-4">
-        <div className="gap-6 lg:grid lg:grid-cols-[180px_minmax(0,1fr)]">
+      <div className="mx-auto max-w-[1180px] px-0 sm:px-6">
+        {/* 広い画面では板の袖を左に。本文は読みやすい幅で止め、余白は右に逃がす */}
+        <div className="lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[260px_minmax(0,1fr)]">
           <BoardRail currentBoardId={boardId} />
 
-          <main className="pt-0 pb-36 sm:pt-4">
+          <main className="pb-40 lg:max-w-[760px]">
             {board?.description && (
-              <p className="mz-ink-sub mz-border border-b px-3.5 py-2.5 text-[12px] sm:px-0 sm:pt-0">
+              <p className="mz-ink-sub mz-border border-b px-4 py-3 text-[13px] leading-relaxed sm:border-b-0 sm:px-0 sm:pt-5 sm:pb-3">
                 {board.description}
               </p>
             )}
 
             {loading ? (
-              <div className="mz-ink-faint py-24 text-center text-sm">読み込み中…</div>
+              <div className="mz-ink-faint py-28 text-center text-[14px]">読み込み中…</div>
             ) : topLevelPosts.length === 0 ? (
-              <div className="mz-card mx-3 mt-6 px-6 py-16 text-center sm:mx-0">
-                <p className="mz-display mz-ink-sub mb-1.5 text-base">まだ誰も書いていません</p>
-                <p className="mz-ink-faint text-[12px] leading-relaxed">
+              <div className="mz-card mx-4 mt-8 px-6 py-16 text-center sm:mx-0">
+                <p className="mz-display mz-ink mb-2 text-[19px]">まだ誰も書いていません</p>
+                <p className="mz-ink-sub text-[13px] leading-relaxed">
                   最初の一行を置くと、この板が動きはじめます
                 </p>
-                <p className="mz-ink-faint mt-3 text-[11px]">
-                  上のざわめき計が満ちるほど、次の書き込みが起きやすくなります
+                <p className="mz-ink-faint mt-4 text-[12px]">
+                  共存度が高いほど、次の書き込みが起きやすくなります
                 </p>
               </div>
             ) : (
-              <div className="mz-border-strong overflow-hidden border-y sm:border">
-                {/* 2ちゃんねる同様、古い書き込みが上。スレが伸びるほど下に積まれる */}
+              <div className="mz-card mt-0 overflow-hidden rounded-none border-x-0 sm:mt-4 sm:rounded-[10px] sm:border-x">
+                {/* 古い書き込みが上。スレが伸びるほど下に積まれる */}
                 {[...topLevelPosts]
                   .sort((a, b) => a.created_at - b.created_at)
                   .map((post, i) => (

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef, forwardRef, useImperativeHandle, Ref } from "react";
-import { analyzeImage } from "@/lib/vision";
-import { saveRecord } from "@/lib/storage";
+import { useState, useRef, forwardRef, useImperativeHandle, Ref } from 'react';
+import { analyzeImage } from '@/lib/vision';
+import { saveRecord } from '@/lib/storage';
 
 export interface CameraViewHandle {
   startCamera: () => Promise<void>;
@@ -16,7 +16,7 @@ const CameraView = forwardRef<CameraViewHandle>((props, ref) => {
   const streamRef = useRef<MediaStream | null>(null);
 
   const [cameraOn, setCameraOn] = useState(false);
-  const [result, setResult] = useState("");
+  const [result, setResult] = useState('');
 
   // 親コンポーネントから呼び出せるメソッドを公開
   useImperativeHandle(ref, () => ({
@@ -35,43 +35,43 @@ const CameraView = forwardRef<CameraViewHandle>((props, ref) => {
     if (!cameraOn) {
       try {
         // カメラ ON（背面カメラを優先）
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
             facingMode: { ideal: 'environment' },
             width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
+            height: { ideal: 720 },
+          },
         });
         streamRef.current = stream;
-        
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          
+
           // videoの準備ができるまで待つ（モバイル対応強化）
           await new Promise<void>((resolve, reject) => {
             if (!videoRef.current) {
               reject(new Error('videoRef is null'));
               return;
             }
-            
+
             const video = videoRef.current;
-            
+
             // タイムアウト設定（10秒）
             const timeout = setTimeout(() => {
               reject(new Error('カメラの準備がタイムアウトしました'));
             }, 10000);
-            
+
             video.onloadedmetadata = () => {
               clearTimeout(timeout);
               console.log('カメラのメタデータ読み込み完了');
-              
+
               // 実際に映像が流れるまで待つ
               const checkReady = () => {
                 if (video.readyState >= 2 && video.videoWidth > 0) {
                   console.log('カメラの準備完了:', {
                     readyState: video.readyState,
                     width: video.videoWidth,
-                    height: video.videoHeight
+                    height: video.videoHeight,
                   });
                   resolve();
                 } else {
@@ -80,7 +80,7 @@ const CameraView = forwardRef<CameraViewHandle>((props, ref) => {
               };
               checkReady();
             };
-            
+
             video.onerror = (err) => {
               clearTimeout(timeout);
               reject(new Error('カメラの読み込みエラー'));
@@ -106,30 +106,30 @@ const CameraView = forwardRef<CameraViewHandle>((props, ref) => {
   // 撮影して Vision に送る
   const capture = async () => {
     if (!cameraOn) {
-      alert("カメラが OFF です。カメラを ON にしてください。");
+      alert('カメラが OFF です。カメラを ON にしてください。');
       return;
     }
 
     const video = videoRef.current;
     if (!video) return;
 
-    const canvas = document.createElement("canvas");
+    const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     ctx.drawImage(video, 0, 0);
 
     const blob = await new Promise<Blob>((resolve) =>
-      canvas.toBlob((b) => resolve(b!), "image/jpeg")
+      canvas.toBlob((b) => resolve(b!), 'image/jpeg')
     );
 
-    const prompt = "この画像について教えてください。";
+    const prompt = 'この画像について教えてください。';
     const reply = await analyzeImage(blob, prompt);
     setResult(reply);
-    
+
     // データを保存（画像ファイルも含む）
     await saveRecord({
       type: 'image',
@@ -139,7 +139,7 @@ const CameraView = forwardRef<CameraViewHandle>((props, ref) => {
     });
 
     // ChatUI にも送る（任意）
-    if (typeof window !== "undefined") {
+    if (typeof window !== 'undefined') {
       (window as any).addChatMessage?.(reply);
     }
   };

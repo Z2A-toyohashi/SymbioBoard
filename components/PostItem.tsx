@@ -8,7 +8,7 @@ import { formatTime } from '@/lib/utils';
  * レス。
  *
  * 書き手が人かAIかを、画面には一切出さない。
- * 名前は全員「名無し」、色も同じ、バッジも付けない。手がかりはIDだけ。
+ * 名前欄そのものを置かない。色も同じ、バッジも付けない。手がかりはIDだけ。
  *
  * ここを分けてしまうと「人の書き込みとAIの書き込みが並んでいる掲示板」になる。
  * そうではなく「どれがどちらか分からない掲示板」であることが、この場の中身そのもの。
@@ -99,11 +99,15 @@ export default function PostItem({
           <button
             key={emoji}
             onClick={() => handleReaction(emoji)}
-            className="border px-1.5 py-0.5 text-[12px]"
+            className="mz-btn mz-btn-sm"
             style={
               info.userReacted
-                ? { borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }
-                : { borderColor: 'var(--mz-line)', color: 'var(--mz-ink-sub)' }
+                ? {
+                    borderColor: 'var(--mz-accent)',
+                    color: 'var(--mz-accent)',
+                    background: 'var(--mz-accent-weak)',
+                  }
+                : { borderColor: 'var(--mz-line-strong)', color: 'var(--mz-ink-sub)' }
             }
           >
             {emoji} <span className="mz-mono">{info.count}</span>
@@ -113,7 +117,7 @@ export default function PostItem({
         <div className="relative">
           <button
             onClick={() => setShowPicker((v) => !v)}
-            className="mz-border mz-ink-faint border px-1.5 py-0.5 text-[12px]"
+            className="mz-btn mz-btn-sm mz-btn-quiet"
             aria-label="リアクションを追加"
           >
             ＋
@@ -126,7 +130,7 @@ export default function PostItem({
                   <button
                     key={emoji}
                     onClick={() => handleReaction(emoji)}
-                    className="hover:mz-bg-accent-weak h-8 w-8 text-base"
+                    className="hover:mz-bg-accent-weak h-11 w-11 text-lg"
                   >
                     {emoji}
                   </button>
@@ -136,12 +140,8 @@ export default function PostItem({
           )}
         </div>
 
-        <button
-          onClick={() => onReply(post.id)}
-          className="mz-mono ml-auto border px-2 py-0.5 text-[12px]"
-          style={{ borderColor: 'var(--mz-accent)', color: 'var(--mz-accent)' }}
-        >
-          返信
+        <button onClick={() => onReply(post.id)} className="mz-btn mz-btn-sm mz-btn-accent ml-auto">
+          返信する
         </button>
       </div>
 
@@ -149,7 +149,7 @@ export default function PostItem({
         <div className="border-t mz-border">
           <button
             onClick={() => setShowReplies((v) => !v)}
-            className="mz-ink-sub mz-surface-sub w-full px-3 py-1 text-left text-[12px] sm:px-4"
+            className="mz-ink-sub mz-surface-sub w-full px-4 py-2.5 text-left text-[13px] sm:px-5"
           >
             <span className="mz-mono mr-1">{showReplies ? '－' : '＋'}</span>
             返信 <span className="mz-mono mz-ink">{replies.length}</span> 件
@@ -198,14 +198,20 @@ function ResBody({
   return (
     <div className="px-3 pt-2 pb-1.5 sm:px-4">
       {/* 名前欄。2ちゃんねるの一行をそのまま踏襲する */}
-      <div className="flex flex-wrap items-baseline gap-1.5 text-[12px] leading-5">
-        <span className="mz-mono mz-ink-faint">
+      <div className="flex flex-wrap items-baseline gap-2 text-[12px] leading-5">
+        {/* 書き手は全員同じ扱いなので、名前という欄そのものを置かない。
+            見分けの手がかりはIDだけにする */}
+        <span className="mz-mono mz-ink-faint tabular-nums">
           {replyNumber ? `${number}-${replyNumber}` : number}
         </span>
-        <span className="mz-ink font-bold">名無し</span>
-        {isOwn && <span className="mz-ink-faint text-[10px]">（自分）</span>}
+        <span
+          className="mz-mono text-[12px]"
+          style={{ color: isOwn ? 'var(--mz-accent)' : 'var(--mz-ink-sub)' }}
+        >
+          ID:{post.author_id.slice(-4)}
+        </span>
+        {isOwn && <span className="mz-accent text-[11px] font-semibold">自分</span>}
         <span className="mz-mono mz-ink-faint">{formatTime(post.created_at)}</span>
-        <span className="mz-mono mz-ink-faint">ID:{post.author_id.slice(-4)}</span>
 
         {isOwn && onDelete && (
           <button

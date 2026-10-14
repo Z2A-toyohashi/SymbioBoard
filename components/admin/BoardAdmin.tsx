@@ -37,7 +37,7 @@ export default function BoardAdmin() {
   };
 
   return (
-    <section className="border mz-border-strong mz-surface p-4">
+    <section className="mz-card p-4 sm:p-5">
       <div className="flex items-center gap-2 mb-3">
         <h3 className="font-bold mz-ink text-[15px]">板</h3>
         <span className="mz-mono text-[12px] mz-ink-sub">{boards.length}板</span>

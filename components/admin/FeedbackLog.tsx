@@ -27,10 +27,7 @@ export default function FeedbackLog({ feedback }: FeedbackLogProps) {
           </div>
         ) : (
           feedback.map((item) => (
-            <div
-              key={item.id}
-              className="mz-surface-sub border mz-border p-4 "
-            >
+            <div key={item.id} className="mz-surface-sub border mz-border p-4 ">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold mz-accent">ID: {item.user_id}</span>
                 <span className="text-xs mz-ink-faint">{formatTime(item.created_at)}</span>

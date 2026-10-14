@@ -165,10 +165,10 @@ export default function PostInput({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 mz-safe-bottom">
-      <div className="border-t-2 mz-border-strong mz-surface">
-        <div className="mx-auto max-w-6xl px-2.5 sm:px-4 lg:grid lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-6">
+      <div className="mz-chrome mz-border border-t">
+        <div className="mx-auto max-w-[1180px] px-4 sm:px-6 lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[260px_minmax(0,1fr)]">
           <div className="hidden lg:block" />
-          <div>
+          <div className="lg:max-w-[760px]">
             {replyTo && replyToPost && (
               <div className="flex items-center gap-2 py-2 border-b mz-border text-[12px] animate-fade-in">
                 <span
@@ -177,7 +177,9 @@ export default function PostInput({
                 >
                   返信先
                 </span>
-                <span className="mz-ink font-bold shrink-0">名無し</span>
+                <span className="mz-mono mz-ink-sub shrink-0 text-[12px]">
+                  ID:{replyToPost.author_id.slice(-4)}
+                </span>
                 <span className="mz-ink-sub truncate flex-1 min-w-0">{replyToPost.content}</span>
                 {onCancel && (
                   <button
@@ -201,27 +203,30 @@ export default function PostInput({
                     setImageFile(null);
                     if (fileInputRef.current) fileInputRef.current.value = '';
                   }}
-                  className="absolute top-3 right-1 w-6 h-6 bg-black/70 text-white text-xs"
+                  className="absolute top-3 right-1 h-7 w-7 rounded-full bg-black/70 text-xs text-white"
                 >
                   ✕
                 </button>
               </div>
             )}
 
-            <div className="flex items-end gap-1.5 py-2.5">
+            <div className="flex items-end gap-2 py-3">
               <button
                 onMouseDown={startRecording}
                 onMouseUp={stopRecording}
                 onMouseLeave={stopRecording}
                 onTouchStart={startRecording}
                 onTouchEnd={stopRecording}
-                className={`shrink-0 w-10 h-10 border grid place-items-center text-[15px] transition-all ${
-                  isRecording ? 'opacity-80' : ''
-                }`}
+                className="mz-btn mz-btn-quiet shrink-0 px-0 text-[17px]"
                 style={
                   isRecording
-                    ? { background: 'var(--mz-ai)', color: '#fff', borderColor: 'var(--mz-ai)' }
-                    : { borderColor: 'var(--mz-line-strong)', color: 'var(--mz-ink-sub)' }
+                    ? {
+                        width: 44,
+                        background: 'var(--mz-accent)',
+                        color: 'var(--mz-accent-ink)',
+                        borderColor: 'var(--mz-accent)',
+                      }
+                    : { width: 44 }
                 }
                 title="長押しで録音して文字にする"
                 aria-label="音声入力"
@@ -231,7 +236,8 @@ export default function PostInput({
 
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="shrink-0 w-10 h-10 border mz-border-strong mz-ink-sub grid place-items-center text-[15px] hover:mz-bg-accent-weak transition-colors"
+                className="mz-btn mz-btn-quiet shrink-0 px-0 text-[17px]"
+                style={{ width: 44 }}
                 title="画像を選ぶ"
                 aria-label="画像を添付"
               >
@@ -252,7 +258,7 @@ export default function PostInput({
                 onFocus={() => setExpanded(true)}
                 placeholder={replyTo ? '返信を書く' : placeholder}
                 rows={expanded ? 3 : 1}
-                className="flex-1 min-w-0 resize-none border mz-border-strong px-3.5 py-2.5 text-[15px] leading-relaxed focus:outline-none transition-all"
+                className="mz-field min-w-0 flex-1 resize-none"
               />
 
               <button
