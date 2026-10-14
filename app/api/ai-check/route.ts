@@ -5,6 +5,7 @@ import { generateAIResponseWithGPT } from '@/lib/gpt';
 import { supabase } from '@/lib/supabase-client';
 import { shouldAIReact, selectRandomEmoji, getActiveAICharacters } from '@/lib/ai-manager';
 import { ensureAIPopulation } from '@/lib/ai-population';
+import { buildResidentPrompt } from '@/lib/prompt';
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,25 +87,15 @@ export async function POST(request: NextRequest) {
     // ランダムに1つのAIを選択
     const aiCharacter = eligibleAIs[Math.floor(Math.random() * eligibleAIs.length)];
 
-    // 板の話題に沿わせる。板ごとに住人の話す内容が変わらないと、板を分ける意味がないため。
-    let boardSystemPrompt = aiCharacter.system_prompt;
+    // いまいる板。プロンプトの組み立てに使う（組み立ては返信先が決まってから）
+    let board: { title: string; description: string | null } | null = null;
     if (boardId) {
-      const { data: board } = await supabase
+      const { data } = await supabase
         .from('boards')
         .select('title, description')
         .eq('id', boardId)
         .single();
-      if (board) {
-        boardSystemPrompt = [
-          aiCharacter.system_prompt,
-          '',
-          `いまあなたがいるのは「${board.title}」という板です。`,
-          board.description ? `板の説明: ${board.description}` : '',
-          'この板の話題から外れないように発言してください。',
-        ]
-          .filter(Boolean)
-          .join('\n');
-      }
+      board = data ?? null;
     }
 
     // AI密度チェック（設定値を使用）
@@ -152,6 +143,17 @@ export async function POST(request: NextRequest) {
       targetPost = lastPost;
     }
     // shouldReply=falseの場合、thread_id=null で新規投稿（新しい話題）
+
+    // ここまでで「どこにいて、何をしに来たか」が揃うので、プロンプトを組む。
+    // アプリの仕組み → 共通の書き方 → 人柄 → 板の状況 → これからすること、の順。
+    const boardSystemPrompt = buildResidentPrompt({
+      commonPrompt: config.system_prompt,
+      characterPrompt: aiCharacter.system_prompt,
+      board,
+      posts,
+      state,
+      isReply: Boolean(thread_id),
+    });
 
     // ニュース取得チェック（新規投稿時のみ、画像生成より優先）
     let generatedImageUrl: string | undefined;

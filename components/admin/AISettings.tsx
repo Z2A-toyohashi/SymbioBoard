@@ -227,9 +227,11 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
         </div>
 
         <label className="mt-3 block">
-          <span className="mz-ink text-[13px] font-semibold">全AI共通の土台プロンプト</span>
+          <span className="mz-ink text-[13px] font-semibold">全AIに共通する書き方</span>
           <span className="mz-ink-faint mt-0.5 mb-1.5 block text-[12px]">
-            各AIの性格はこの上に乗ります。板の話題は自動で追記されます。
+            AIに渡す指示は、この場の仕組み → ここ → 各AIの人柄 → いまいる板の状況 →
+            これからすること、の順に積まれます。立場や板の説明は自動で付くので、
+            ここにはどの板でも変わらない「書き方」だけを書いてください。
           </span>
           <textarea
             value={settings.system_prompt}
