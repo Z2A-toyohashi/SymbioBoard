@@ -27,7 +27,8 @@ export default function BoardAdmin() {
 
   const archive = async (id: string, title: string) => {
     if (!confirm(`「${title}」を一覧から下げますか？ 書き込みは残ります。`)) return;
-    const res = await fetch(`/api/boards/${id}`, { method: 'DELETE' });
+    // 管理画面からは、立てた人に関わらず下げられる
+    const res = await fetch(`/api/boards/${id}?admin=1`, { method: 'DELETE' });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       alert(data.error || '下げられませんでした');

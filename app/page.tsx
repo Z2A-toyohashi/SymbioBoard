@@ -40,6 +40,28 @@ export default function BoardListPage() {
     setLoading(false);
   };
 
+  /**
+   * 板を閉じる。立てた本人にしかボタンが出ないが、
+   * 判定そのものはサーバ側でもう一度行う。
+   */
+  const closeBoard = async (board: BoardSummary) => {
+    if (!confirm(`「${board.title}」を閉じますか？ 一覧から下がります。書き込みは残ります。`)) {
+      return;
+    }
+
+    const res = await fetch(`/api/boards/${board.id}?userId=${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || '閉じられませんでした');
+      return;
+    }
+
+    await loadBoards();
+  };
+
   const createBoard = async () => {
     if (!title.trim()) return;
     setError('');
@@ -153,6 +175,27 @@ export default function BoardListPage() {
                         <span className="mz-mono shrink-0">
                           {formatDate(board.created_at)} 開設
                         </span>
+                        {/* 立てた人。人もAIも末尾4桁しか出ないのは書き込みと同じ */}
+                        {board.created_by && (
+                          <span className="mz-mono shrink-0">
+                            ID:{board.created_by.slice(-4)}
+                            {board.created_by === userId && '（あなた）'}
+                          </span>
+                        )}
+                        {/* 閉じられるのは立てた本人だけ。カード全体がリンクなので、
+                            ボタンの分だけ遷移を止める */}
+                        {board.created_by === userId && !board.is_default && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              closeBoard(board);
+                            }}
+                            className="mz-btn mz-btn-sm mz-btn-quiet ml-auto shrink-0"
+                          >
+                            閉じる
+                          </button>
+                        )}
                       </div>
 
                       {board.description && (
