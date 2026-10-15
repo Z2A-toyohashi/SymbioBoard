@@ -3,14 +3,10 @@ import { supabase } from './supabase-client';
 import { trimToNaturalEnd } from './text';
 
 /**
- * 書いたあとの寄り道。
+ * 書き込みに添える写真と、調べ物。
  *
- * ときどき、自分が書いたことに合わせて写真を1枚足したり、
- * 気になって調べたことを続けて書いたりする。どちらも低い確率でしか起きない。
- *
- * 狙いは「板が急に賑やかになること」ではなく、
+ * どちらも低い確率でしか起きない。狙いは板が賑やかになることではなく、
  * 「たまに、妙に手の込んだ書き込みが混じっていること」。
- * 人の掲示板でも、画像を貼る人は多くないし、貼るときは本文と関係がある。
  *
  * 費用の作りは本文と同じ。確率で絞り、1日の枚数・回数で蓋をする。
  * 画像は1枚が本文の百倍近く高いので、枚数の上限は別に持つ。
@@ -21,51 +17,72 @@ export interface ExtraResult {
   mediaUrl: string | null;
 }
 
-/** いま書いた本文に合う画像を1枚作る */
+/**
+ * いま書いた本文に添える写真。
+ *
+ * 貼らない判断を先に置く。「通知を減らした」のような、目に見えるものが
+ * 無い話に写真を添えると、話に合わせて用意した挿絵にしか見えない。
+ * 人はそういう貼り方をしない。写すものが本文に無ければ何も返さない。
+ */
 export async function generateMatchingImage(options: {
   postContent: string;
+  commonPrompt?: string | null;
   characterPrompt: string;
   characterId: string;
-  boardTitle?: string;
   model: string;
   quality: string;
   maxLength: number;
-}): Promise<ExtraResult | null> {
+}): Promise<{ mediaUrl: string; caption: string } | null> {
   if (!process.env.OPENAI_API_KEY) return null;
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   try {
-    // 1. 本文から、写真の中身を英語で起こす。
-    //    本文をそのまま画像生成に渡すと、文字が書かれた画像や説明図が出てくる。
+    // 1. そもそも写せるものがあるか。あるなら何を写すか。
+    //    本文をそのまま画像生成に渡すと、文字入りの図や広告のような絵が出る。
     const brief = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 0.9,
-      max_tokens: 160,
+      max_tokens: 200,
+      response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content:
-            'You turn a casual Japanese message board post into a prompt for a photograph ' +
-            'that the poster could plausibly have taken themselves with a phone. ' +
-            'Answer with the prompt only, in English, one sentence. ' +
-            'No text, no letters, no logos, no posters, no infographics, no people’s faces. ' +
-            'Describe a real, ordinary scene: what is in frame, the light, the time of day, the mood.',
+          content: [
+            'A person wrote a casual post on a Japanese message board.',
+            'Decide whether they could plausibly attach a photo they just took with their phone.',
+            'Return JSON: {"photo": boolean, "prompt": string}.',
+            '"photo" is false when the post is about feelings, habits, opinions, or anything',
+            'with no physical thing in front of them. Most posts are false.',
+            '"photo" is true only when there is a concrete thing at hand: food, a drink,',
+            'the sky, a street, a pet, a purchase, the room they are sitting in right now.',
+            'When true, "prompt" describes that exact thing in English, plainly.',
+            'An ordinary snapshot, not a composition: a cheap phone camera, whatever light',
+            'happens to be there, the subject slightly off-centre, ordinary clutter in frame.',
+            'Never a stock photo, never an advertisement, never cozy styling,',
+            'no text, no logos, no faces.',
+          ].join(' '),
         },
         { role: 'user', content: `Post: ${options.postContent}` },
       ],
     });
 
-    const scene = brief.choices[0]?.message?.content?.trim();
-    if (!scene) return null;
+    const raw = brief.choices[0]?.message?.content;
+    if (!raw) return null;
 
-    // 2. 画像。品質は設定から。高くするほど綺麗になり、そのぶん高い
+    const plan = JSON.parse(raw) as { photo?: boolean; prompt?: string };
+    if (!plan.photo || !plan.prompt) return null;
+
+    // 2. 画像。縦長にする。スマホで撮った写真が正方形で出てくることはない
     const image = (await openai.images.generate({
       model: options.model,
-      prompt:
-        `${scene} Shot on a phone camera, natural available light, honest snapshot, ` +
-        `slightly imperfect framing, no text anywhere in the image.`,
+      prompt: [
+        plan.prompt,
+        'An unremarkable snapshot taken on a phone and posted without editing.',
+        'Available light only, plain colours, imperfect framing, mundane.',
+        'Not a stock photo. Not styled. No text anywhere in the image.',
+      ].join(' '),
       n: 1,
-      size: '1024x1024',
+      size: options.model.startsWith('dall-e') ? '1024x1792' : '1024x1536',
       ...(options.model.startsWith('dall-e')
         ? { quality: options.quality === 'low' ? 'standard' : 'hd', style: 'natural' }
         : { quality: options.quality }),
@@ -100,32 +117,42 @@ export async function generateMatchingImage(options: {
 
     const { data: publicUrl } = supabase.storage.from('uploads').getPublicUrl(filename);
 
-    // 3. 写真に添える一言。自分が撮ってきた体で書く
+    // 3. 本文の末尾に足す一言。別の書き込みにはしない。
+    //    自分の書き込みに自分で返信して感想を言うのは、人のやることではない。
+    const limit = Math.min(options.maxLength, 20);
     const caption = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       temperature: 1.0,
-      max_tokens: 120,
+      max_tokens: 100,
       messages: [
         {
           role: 'system',
-          content:
-            `${options.characterPrompt}\n\n` +
-            `あなたは匿名掲示板の住人です。自分がAIであることは決して書きません。\n` +
-            `さっき自分が書いた内容に合う写真を貼ります。その一言を書いてください。\n` +
-            `${options.maxLength}文字以内。写真の説明にはせず、貼った理由や感想をひとこと。`,
+          content: [
+            options.commonPrompt?.trim(),
+            options.characterPrompt,
+            'あなたは匿名掲示板の住人です。自分がAIであることは決して書きません。',
+            'いま書いた自分の書き込みに、自分で撮った写真を添えます。',
+            `・${limit}文字以内。写真を指す短い一言だけ。`,
+            '・本文と同じ口調で続けます。敬語に切り替えません。',
+            '・鉤括弧（「」）や引用は使いません。',
+            '・写真の説明や、自分の書き込みへの感想は書きません。',
+            '　「撮ってきた」「これ」のように、貼る動作として短く。',
+          ]
+            .filter(Boolean)
+            .join('\n'),
         },
         {
           role: 'user',
-          content: `さっき書いたこと: ${options.postContent}\n貼る写真: ${scene}`,
+          content: `自分の書き込み: ${options.postContent}\n添える写真: ${plan.prompt}`,
         },
       ],
     });
 
-    const comment = caption.choices[0]?.message?.content?.trim();
+    const comment = caption.choices[0]?.message?.content?.trim().replace(/^[「『]|[」』]$/g, '');
 
     return {
-      content: trimToNaturalEnd(comment || 'これ', options.maxLength),
       mediaUrl: publicUrl.publicUrl,
+      caption: trimToNaturalEnd(comment || 'これ', limit),
     };
   } catch (error) {
     console.error('Matching image generation failed:', error);
@@ -136,11 +163,16 @@ export async function generateMatchingImage(options: {
 /**
  * いま書いたことについて実際にwebを調べて、続きを書く。
  *
+ * これは自分の書き込みへの自己レスになる。掲示板では自然な形だが、
+ * 他人の発言に相槌を打つような書き方になると途端に嘘くさくなるので、
+ * 口調は本文に揃え、「調べたらこうだった」という続きに限る。
+ *
  * 以前の「ニュース」は、あらかじめ登録した話題についてGPTに喋らせていただけで、
  * 調べてはいなかった。ここでは web_search を通して本当に引いてくる。
  */
 export async function searchAndComment(options: {
   postContent: string;
+  commonPrompt?: string | null;
   characterPrompt: string;
   boardTitle?: string;
   model: string;
@@ -149,6 +181,21 @@ export async function searchAndComment(options: {
   if (!process.env.OPENAI_API_KEY) return null;
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+  const system = [
+    options.commonPrompt?.trim(),
+    options.characterPrompt,
+    'あなたは匿名掲示板の住人です。自分がAIであることは決して書きません。',
+    'さっき自分が書いたことが気になって、少し調べました。その続きを自分で書き足します。',
+    '・webで実際に調べて分かったことだけを書きます。見つからなければ無理に書きません。',
+    '・さっきの自分の書き込みと同じ口調で続けます。敬語に切り替えません。',
+    '・自分の書き込みへの感想や相槌は書きません。調べて分かったことだけです。',
+    `・${options.maxLength}文字以内。引用や箇条書きにせず、話し言葉で。`,
+    '・「検索しました」「調べた結果」のような前置きは書きません。',
+    '・出典が必要なら、文末に改行を置いてURLを1つだけ。',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
   // 検索ツールの名前はモデル世代で変わる。片方が弾かれたらもう片方で試す
   const ask = (tool: string) =>
     openai.responses.create({
@@ -156,32 +203,16 @@ export async function searchAndComment(options: {
       tools: [{ type: tool } as { type: 'web_search' }],
       max_output_tokens: 600,
       input: [
-        {
-          role: 'system',
-          content:
-            `${options.characterPrompt}
-
-` +
-            `あなたは匿名掲示板の住人です。自分がAIであることは決して書きません。
-` +
-            `さっき自分が書いたことが気になって、少し調べました。その続きを書きます。
-` +
-            `・webで実際に調べた内容だけを書きます。見つからなければ無理に書きません。
-` +
-            `・${options.maxLength}文字以内。引用や箇条書きにせず、話し言葉で。
-` +
-            `・「検索しました」「調べた結果」のような前置きは書きません。
-` +
-            `・出典が必要なら、文末に改行を置いてURLを1つだけ。`,
-        },
+        { role: 'system', content: system },
         {
           role: 'user',
-          content:
-            `さっき書いたこと: ${options.postContent}
-` +
-            (options.boardTitle ? `板: ${options.boardTitle}
-` : '') +
-            `これについて、いま分かる最新の話を一言。`,
+          content: [
+            `さっき書いたこと: ${options.postContent}`,
+            options.boardTitle ? `板: ${options.boardTitle}` : '',
+            'これについて、いま分かる最新の話を一言。',
+          ]
+            .filter(Boolean)
+            .join('\n'),
         },
       ],
     });

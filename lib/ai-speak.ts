@@ -5,7 +5,7 @@ import { generateAIResponseWithGPT } from './gpt';
 import { buildResidentPrompt } from './prompt';
 import { ensureAIPopulation } from './ai-population';
 import { shouldAIReact, selectRandomEmoji } from './ai-manager';
-import { generateMatchingImage, searchAndComment, type ExtraResult } from './ai-extra';
+import { generateMatchingImage, searchAndComment } from './ai-extra';
 import { maybeCreateBoard } from './ai-board';
 
 /**
@@ -415,12 +415,30 @@ async function speakOnClaimedBoard(
     return { boardId, posted: false, reason: 'all_ais_in_cooldown', state };
   }
 
-  // 返信にするか、新しく立てるか
-  const lastPost = posts[0];
+  /**
+   * 誰に返信するか。
+   *
+   * 直前の書き込みに無条件で返すと、AIがAIに返し、それにまたAIが返す。
+   * 人がいない時間帯ほどそうなり、板がAI同士の会話で埋まる。
+   * 読む側から見れば、誰も読んでいない会話が流れているだけになる。
+   *
+   *   1. 返信先は、人の書き込みを優先して選ぶ
+   *   2. 相手がAIしかいない場合は、返信の確率を大きく下げる
+   *   3. 自分自身の書き込みには返信しない
+   */
   const replyChance: Record<string, number> = { SOLO: 0.8, FRAGILE: 0.4, SILENCE: 0.2, FLOW: 0.1 };
-  const shouldReply = Boolean(lastPost) && Math.random() < (replyChance[state] ?? 0);
-  const thread_id = shouldReply && lastPost ? lastPost.thread_id || lastPost.id : null;
-  const targetPost = shouldReply ? lastPost : undefined;
+
+  const candidates = posts.slice(0, 6).filter((p) => p.author_id !== aiCharacter.id);
+  const humanTargets = candidates.filter((p) => p.author_type === 'user');
+  const target = humanTargets[0] ?? candidates[0];
+
+  // 人への返信はそのまま。AI相手は1/4に落とす
+  const base = replyChance[state] ?? 0;
+  const chance = target && target.author_type === 'user' ? base : base * 0.25;
+  const shouldReply = Boolean(target) && Math.random() < chance;
+
+  const thread_id = shouldReply && target ? target.thread_id || target.id : null;
+  const targetPost = shouldReply ? target : undefined;
 
   const systemPrompt = buildResidentPrompt({
     commonPrompt: config.system_prompt,
@@ -451,15 +469,26 @@ async function speakOnClaimedBoard(
     return { boardId, posted: false, reason: 'generation_failed', state };
   }
 
+  /**
+   * 写真は、この書き込みそのものに添える。
+   *
+   * 以前は別の書き込みとして自分の投稿にぶら下げていたが、
+   * 同じIDが自分の書き込みに即レスして他人行儀な感想を言う形になり、
+   * 人の掲示板では見ない並びになっていた。
+   * 写真を貼るなら、貼りたいことを書いたその書き込みに付く。
+   */
+  const photo = await maybeAttachPhoto({ content, character: aiCharacter, config });
+
   const post: Post = {
     id: `ai-${now}-${Math.random().toString(36).slice(2, 8)}`,
-    content,
-    type: 'text',
+    content: photo?.caption ? `${content}
+${photo.caption}` : content,
+    type: photo ? 'image' : 'text',
     created_at: Date.now(),
     thread_id,
     author_type: 'ai',
     author_id: aiCharacter.id,
-    media_url: null,
+    media_url: photo?.mediaUrl ?? null,
     board_id: boardId,
   };
 
@@ -494,8 +523,8 @@ async function speakOnClaimedBoard(
     },
   ]);
 
-  // たまに、いま書いたことに合う写真を貼る／調べた話を続ける
-  const followUp = await maybeFollowUp({
+  // たまに、気になって調べた話を自分で書き足す（写真は本文に添え済み）
+  const followUp = await maybeSearchFollowUp({
     parent: post,
     boardId,
     boardTitle: board?.title,
@@ -509,7 +538,9 @@ async function speakOnClaimedBoard(
   return {
     boardId,
     posted: true,
-    reason: followUp ? `posted+${followUp}` : 'posted',
+    reason: [photo ? 'photo' : null, followUp ? 'search' : null].filter(Boolean).length
+      ? `posted+${[photo ? 'photo' : null, followUp ? 'search' : null].filter(Boolean).join('+')}`
+      : 'posted',
     content,
     aiId: aiCharacter.id,
     state,
@@ -566,99 +597,125 @@ function pickCharacter(
 }
 
 /**
- * 書いたあとの寄り道。
+ * 書き込みに写真を添えるかどうか。
  *
- * たまに、いま書いたことに合う写真を貼ったり、気になって調べた話を続けたりする。
- * どちらも本文への返信として、少し間を置いて置かれる。
+ * 添えるのは、その書き込みそのもの。別の書き込みにはしない。
+ * 自分の書き込みに自分で返信して「いい写真ですね」と言うのは、人のやることではない。
  *
- * 蓋は三重。確率（既定5〜8%）、1日の枚数・回数、そして住人ごとの許可。
+ * 蓋は三重。確率（既定5%）、1日の枚数、そして住人ごとの許可。
+ * さらに生成側でも「写すものが本文に無ければ貼らない」を見ている。
  * 画像は1枚が本文1回の百倍以上かかるので、枚数の上限は本文とは別に持つ。
  */
-async function maybeFollowUp(args: {
+async function maybeAttachPhoto(args: {
+  content: string;
+  character: AICharacterRow;
+  config: AIConfig;
+}): Promise<{ mediaUrl: string; caption: string } | null> {
+  const { content, character, config } = args;
+
+  // 住人ごとの設定は「上乗せ」として扱う。
+  // 許可が付いている住人はよく貼り、付いていない住人もまれに貼る。
+  const chance = character.can_generate_images
+    ? Math.max(config.ai_image_followup_probability, character.image_generation_probability ?? 0)
+    : config.ai_image_followup_probability;
+
+  if (Math.random() >= chance) return null;
+  if (!(await withinDailyLimit('image', config))) return null;
+
+  const photo = await generateMatchingImage({
+    postContent: content,
+    commonPrompt: config.system_prompt,
+    characterPrompt: character.system_prompt,
+    characterId: character.id,
+    model: config.image_model,
+    quality: config.image_quality,
+    maxLength: config.max_response_length,
+  });
+
+  if (!photo) return null;
+
+  await supabase.from('logs').insert([
+    {
+      event_type: 'ai_image',
+      user_id: character.id,
+      post_id: null,
+      metadata: { content: photo.caption, model: config.image_model, quality: config.image_quality },
+      created_at: Date.now(),
+    },
+  ]);
+
+  return photo;
+}
+
+/**
+ * 書いたあとに、気になって調べた話を自分で書き足す。
+ *
+ * これは自己レスになる。掲示板では自然な形だが、
+ * 「調べて分かったこと」でないなら書かない。
+ */
+async function maybeSearchFollowUp(args: {
   parent: Post;
   boardId: string;
   boardTitle?: string;
   character: AICharacterRow;
   config: AIConfig;
-}): Promise<'image' | 'search' | null> {
+}): Promise<boolean> {
   const { parent, boardId, boardTitle, character, config } = args;
 
-  // 住人ごとの設定は「上乗せ」として扱う。
-  // 許可が付いている住人はよく貼り、付いていない住人もまれに貼る。
-  const imageChance = character.can_generate_images
-    ? Math.max(config.ai_image_followup_probability, character.image_generation_probability ?? 0)
-    : config.ai_image_followup_probability;
-
-  const searchChance = character.can_fetch_news
+  const chance = character.can_fetch_news
     ? Math.max(config.ai_search_followup_probability, character.news_fetch_probability ?? 0)
     : config.ai_search_followup_probability;
 
-  let extra: ExtraResult | null = null;
-  let kind: 'image' | 'search' | null = null;
+  if (Math.random() >= chance) return false;
+  if (!(await withinDailyLimit('search', config))) return false;
 
-  if (Math.random() < imageChance && (await withinDailyLimit('image', config))) {
-    extra = await generateMatchingImage({
-      postContent: parent.content,
-      characterPrompt: character.system_prompt,
-      characterId: character.id,
-      boardTitle,
-      model: config.image_model,
-      quality: config.image_quality,
-      maxLength: config.max_response_length,
-    });
-    kind = extra ? 'image' : null;
-  }
+  const extra = await searchAndComment({
+    postContent: parent.content,
+    commonPrompt: config.system_prompt,
+    characterPrompt: character.system_prompt,
+    boardTitle,
+    model: config.gpt_model,
+    maxLength: Math.max(config.max_response_length, 80),
+  });
 
-  if (!extra && Math.random() < searchChance && (await withinDailyLimit('search', config))) {
-    extra = await searchAndComment({
-      postContent: parent.content,
-      characterPrompt: character.system_prompt,
-      boardTitle,
-      model: config.gpt_model,
-      maxLength: Math.max(config.max_response_length, 80),
-    });
-    kind = extra ? 'search' : null;
-  }
-
-  if (!extra || !kind) return null;
+  if (!extra) return false;
 
   const now = Date.now();
   const followUp: Post = {
     id: `ai-${now}-${Math.random().toString(36).slice(2, 8)}`,
     content: extra.content,
-    type: extra.mediaUrl ? 'image' : 'text',
+    type: 'text',
     created_at: now,
-    // 自分の書き込みへの返信として置く。独立した投稿にすると脈絡が切れる
+    // 自分の書き込みへの続きとして置く
     thread_id: parent.thread_id || parent.id,
     author_type: 'ai',
     author_id: character.id,
-    media_url: extra.mediaUrl,
+    media_url: null,
     board_id: boardId,
   };
 
   const { error } = await supabase.from('posts').insert([followUp]);
   if (error) {
     console.error('Follow-up post failed:', error.message);
-    return null;
+    return false;
   }
 
   await supabase.from('logs').insert([
     {
-      event_type: kind === 'image' ? 'ai_image' : 'ai_search',
+      event_type: 'ai_search',
       user_id: character.id,
       post_id: followUp.id,
       metadata: {
         board_id: boardId,
         parent_post_id: parent.id,
         content: extra.content,
-        model: kind === 'image' ? config.image_model : config.gpt_model,
-        quality: kind === 'image' ? config.image_quality : null,
+        model: config.gpt_model,
       },
       created_at: now,
     },
   ]);
 
-  return kind;
+  return true;
 }
 
 /** 今日の枚数・回数がまだ残っているか */

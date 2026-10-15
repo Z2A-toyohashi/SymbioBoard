@@ -37,7 +37,9 @@ export default function PostItem({
   onDelete,
   onReactionUpdate,
 }: PostItemProps) {
-  const [showReplies, setShowReplies] = useState(replies.length <= 5);
+  // 返信は畳んでおく。スレッドが縦に伸びると、一覧を眺める動きが成立しない。
+  // 開けることが分かるよう、件数と「開く」を帯に出す。
+  const [showReplies, setShowReplies] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [reactions, setReactions] = useState<ReactionMap>({});
 
@@ -149,11 +151,36 @@ export default function PostItem({
         <div className="border-t mz-border">
           <button
             onClick={() => setShowReplies((v) => !v)}
-            className="mz-ink-sub mz-surface-sub w-full px-4 py-2.5 text-left text-[13px] sm:px-5"
+            aria-expanded={showReplies}
+            className="mz-ink-sub mz-surface-sub hover:mz-ink flex w-full items-center gap-2 px-4 py-2.5 text-left text-[13px] transition-colors sm:px-5"
           >
-            <span className="mz-mono mr-1">{showReplies ? '－' : '＋'}</span>
-            返信 <span className="mz-mono mz-ink">{replies.length}</span> 件
+            {/* 開く向きが一目で分かるよう、記号ではなく三角を回す */}
+            <span
+              aria-hidden
+              className="inline-block text-[10px] transition-transform duration-150"
+              style={{ transform: showReplies ? 'rotate(90deg)' : 'none' }}
+            >
+              ▶
+            </span>
+            返信 <span className="mz-mono mz-ink font-bold">{replies.length}</span> 件
+            <span className="mz-ink-faint ml-auto text-[12px]">
+              {showReplies ? '閉じる' : '開く'}
+            </span>
           </button>
+
+          {/* 畳んでいる間は、最初の返信の冒頭だけ覗かせる。
+              中身があることが分かると、開く手が動く */}
+          {!showReplies && (
+            <button
+              onClick={() => setShowReplies(true)}
+              className="mz-ink-faint mz-surface-sub block w-full truncate border-t mz-border px-4 py-2 text-left text-[12px] sm:px-5"
+            >
+              {replies[0].media_url && !replies[0].content.trim()
+                ? '写真'
+                : replies[0].content.replace(/\s+/g, ' ').slice(0, 60)}
+              {replies.length > 1 && ` ほか${replies.length - 1}件`}
+            </button>
+          )}
 
           {showReplies && (
             <div
