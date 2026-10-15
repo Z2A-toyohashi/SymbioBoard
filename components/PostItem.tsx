@@ -100,36 +100,29 @@ export default function PostItem({
         parentNumber={parentNumber}
         onJumpTo={onJumpTo}
         isOwn={post.author_id === currentUserId}
-        onDelete={onDelete}
       />
 
-      <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 sm:px-4">
+      {/* 操作は文字だけにする。削除と同じ重さで、本文の邪魔をしない。
+          枠や色の付いたボタンを並べると、書き込みより操作のほうが目立つ */}
+      <div className="flex flex-wrap items-center gap-3 px-3 pb-2 text-[12px] sm:px-4">
         {Object.entries(reactions).map(([emoji, info]) => (
           <button
             key={emoji}
             onClick={() => handleReaction(emoji)}
-            className="mz-btn mz-btn-sm"
-            style={
-              info.userReacted
-                ? {
-                    borderColor: 'var(--mz-accent)',
-                    color: 'var(--mz-accent)',
-                    background: 'var(--mz-accent-weak)',
-                  }
-                : { borderColor: 'var(--mz-line-strong)', color: 'var(--mz-ink-sub)' }
-            }
+            className="mz-mono tabular-nums"
+            style={{ color: info.userReacted ? 'var(--mz-accent)' : 'var(--mz-ink-sub)' }}
           >
-            {emoji} <span className="mz-mono">{info.count}</span>
+            {emoji} {info.count}
           </button>
         ))}
 
         <div className="relative">
           <button
             onClick={() => setShowPicker((v) => !v)}
-            className="mz-btn mz-btn-sm mz-btn-quiet"
-            aria-label="リアクションを追加"
+            className="mz-ink-faint"
+            aria-label="スタンプを押す"
           >
-            ＋
+            スタンプ
           </button>
           {showPicker && (
             <>
@@ -149,12 +142,21 @@ export default function PostItem({
           )}
         </div>
 
-        <button
-          onClick={() => onReply(post.id)}
-          className="mz-btn mz-btn-sm mz-btn-accent ml-auto"
-        >
-          返信する
+        <button onClick={() => onReply(post.id)} className="mz-ink-sub">
+          返信
         </button>
+
+        {post.author_id === currentUserId && onDelete && (
+          <button
+            onClick={() => {
+              if (confirm('この投稿を削除しますか？')) onDelete(post.id);
+            }}
+            className="ml-auto"
+            style={{ color: 'var(--mz-danger)' }}
+          >
+            削除
+          </button>
+        )}
       </div>
     </article>
   );
@@ -166,14 +168,12 @@ function ResBody({
   parentNumber,
   onJumpTo,
   isOwn,
-  onDelete,
 }: {
   post: Post;
   number: number;
   parentNumber?: number;
   onJumpTo?: (number: number) => void;
   isOwn: boolean;
-  onDelete?: (postId: string) => void;
 }) {
   return (
     <div className="px-3 pt-2 pb-1.5 sm:px-4">
@@ -190,18 +190,6 @@ function ResBody({
         </span>
         {isOwn && <span className="mz-accent text-[11px] font-semibold">自分</span>}
         <span className="mz-mono mz-ink-faint">{formatTime(post.created_at)}</span>
-
-        {isOwn && onDelete && (
-          <button
-            onClick={() => {
-              if (confirm('この投稿を削除しますか？')) onDelete(post.id);
-            }}
-            className="ml-auto text-[11px]"
-            style={{ color: 'var(--mz-danger)' }}
-          >
-            削除
-          </button>
-        )}
       </div>
 
       <div className="mt-1 pl-1">
