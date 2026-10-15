@@ -1,4 +1,4 @@
-import type { Post } from '@/types';
+import type { Post, SpaceState } from '@/types';
 import { supabase } from './supabase-client';
 import { detectSpaceState } from './ai-logic';
 import { generateAIResponseWithGPT } from './gpt';
@@ -333,6 +333,18 @@ async function speakOnClaimedBoard(
   if (!board.title || board.archived) {
     return { boardId, posted: false, reason: 'board_closed', state };
   }
+
+  /**
+   * 自分あての返信に答える。
+   *
+   * 人がAIの書き込みに返信したのに、そのAIが黙っているのが一番おかしい。
+   * 他の住人が代わりに答えるのも違う。話しかけられた本人が答える。
+   *
+   * ここだけは密度と確率を飛ばす。問いかけに対する返事を
+   * 「AIが書きすぎているから」で止めると、ただの無視になるため。
+   */
+  const answered = await answerPendingReply(posts, board, config, boardId, now, state);
+  if (answered) return answered;
 
   /**
    * AI密度。
@@ -792,6 +804,153 @@ async function reactSometimes(posts: Post[], state: string): Promise<boolean> {
   }
 
   return !error;
+}
+
+/** 同じやり取りの中で、AIが答える回数の上限 */
+const MAX_CHAIN_ANSWERS = 4;
+
+/** これより古い返信には、いまさら答えない */
+const ANSWER_WINDOW = 6 * 3600000;
+
+/**
+ * 自分の書き込みに付いた返信へ、本人が答える。
+ *
+ * 会話が永遠に続かないよう、蓋を四つ。
+ *
+ *   1. **人からの返信にだけ答える。** AIからの返信には答えない。
+ *      ここを開けるとAI同士で無限に続く
+ *   2. **1つの返信につき1回だけ。** 既に誰かが答えていれば何もしない
+ *   3. **同じやり取りで4回まで。** 親をたどって自分の発言を数える。
+ *      人が食い下がっても、どこかで打ち止めになる
+ *   4. **6時間より古い返信には答えない。** 返事が来ないまま流れた話を
+ *      いまさら掘り返さない
+ *
+ * 1日の発言数の上限と、板ごとの点検間隔は、これまでどおり効いている。
+ */
+async function answerPendingReply(
+  posts: Post[],
+  board: BoardRow,
+  config: AIConfig,
+  boardId: string,
+  now: number,
+  state: SpaceState
+): Promise<SpeakOutcome | null> {
+  const byId = new Map(posts.map((p) => [p.id, p]));
+
+  // 新しい順に並んでいるので、古い返信から順に見るため逆から回す
+  for (const reply of [...posts].reverse()) {
+    if (reply.author_type !== 'user') continue;
+    if (!reply.thread_id) continue;
+    if (now - reply.created_at > ANSWER_WINDOW) continue;
+
+    const parent = byId.get(reply.thread_id);
+    if (!parent || parent.author_type !== 'ai') continue;
+
+    // 既に誰かが答えている
+    if (posts.some((p) => p.thread_id === reply.id)) continue;
+
+    // 同じやり取りで、この住人が何回喋ったか
+    let answers = 0;
+    let cursor: Post | undefined = parent;
+    while (cursor) {
+      if (cursor.author_id === parent.author_id) answers++;
+      cursor = cursor.thread_id ? byId.get(cursor.thread_id) : undefined;
+    }
+    if (answers >= MAX_CHAIN_ANSWERS) continue;
+
+    const { data: character } = await supabase
+      .from('ai_characters')
+      .select('*')
+      .eq('id', parent.author_id)
+      .single();
+
+    if (!character) continue;
+
+    const systemPrompt = buildResidentPrompt({
+      commonPrompt: config.system_prompt,
+      characterPrompt: character.system_prompt as string,
+      board,
+      posts,
+      state,
+      isReply: true,
+    });
+
+    const content = await generateAIResponseWithGPT(
+      `${systemPrompt}
+
+これはあなた自身の書き込みへの返信です。` +
+        `書いた本人として、相手が言ったことに直接答えてください。` +
+        `話を広げず、聞かれたことに答えるだけで充分です。` +
+        (answers >= MAX_CHAIN_ANSWERS - 1
+          ? `なお、この話はここで一区切りです。次に続けさせる問いかけは書きません。`
+          : ''),
+      posts,
+      reply,
+      config.max_response_length,
+      config.gpt_temperature,
+      config.gpt_presence_penalty,
+      config.gpt_frequency_penalty,
+      config.gpt_model
+    );
+
+    if (!content || !content.trim()) {
+      return { boardId, posted: false, reason: 'answer_generation_failed', state };
+    }
+
+    const post: Post = {
+      id: `ai-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      content,
+      type: 'text',
+      created_at: Date.now(),
+      thread_id: reply.id,
+      author_type: 'ai',
+      author_id: parent.author_id,
+      media_url: null,
+      board_id: boardId,
+    };
+
+    await ensureAIUser(parent.author_id);
+
+    const { error } = await supabase.from('posts').insert([post]);
+    if (error) {
+      return { boardId, posted: false, reason: `insert_failed: ${error.message}`, state };
+    }
+
+    await supabase
+      .from('ai_characters')
+      .update({ last_post_time: now })
+      .eq('id', parent.author_id);
+    await supabase.from('board_ai_state').update({ last_ai_post_at: now }).eq('board_id', boardId);
+
+    await supabase.from('logs').insert([
+      {
+        event_type: 'ai_intervention',
+        user_id: parent.author_id,
+        post_id: post.id,
+        metadata: {
+          state,
+          content,
+          board_id: boardId,
+          is_reply: true,
+          is_answer: true,
+          chain_answers: answers + 1,
+          ai_character: character.name,
+        },
+        created_at: Date.now(),
+      },
+    ]);
+
+    return {
+      boardId,
+      posted: true,
+      reason: 'answered',
+      content,
+      aiId: parent.author_id as string,
+      state,
+    };
+  }
+
+  return null;
 }
 
 interface BoardRow {
