@@ -56,16 +56,51 @@ export default function BoardPage() {
 
     init();
 
-    const subscription = supabase
-      .channel(`posts-${boardId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
-        fetchPosts();
-      })
-      .subscribe();
+    /**
+     * 書き込みの受信。
+     *
+     * 接続はこの板の投稿だけに絞る。板をまたいで全件を受けると、
+     * 見ていない板の書き込みでも取得が走る。
+     *
+     * 戻る/進むでページが凍結される（bfcache）と、この接続は切られる。
+     * 復帰しても自動では張り直されないので、そのままだと新しい書き込みが
+     * 画面に出てこなくなる。復帰時に張り直して取り直す。
+     */
+    let subscription = subscribeToPosts();
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      subscription.unsubscribe();
+      subscription = subscribeToPosts();
+      fetchPosts();
+    };
+
+    // タブに戻ってきた時は取り直すだけでよい。接続が生きていれば張り直しは無駄になる。
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchPosts();
+    };
+
+    window.addEventListener('pageshow', handlePageShow);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('pageshow', handlePageShow);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
+
+    function subscribeToPosts() {
+      return supabase
+        .channel(`posts-${boardId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'posts', filter: `board_id=eq.${boardId}` },
+          () => {
+            fetchPosts();
+          }
+        )
+        .subscribe();
+    }
   }, [boardId, fetchPosts]);
 
   // 住人の様子をうかがう。投稿が0件でも回すので、誰も書いていない板でも会話が始まる。
