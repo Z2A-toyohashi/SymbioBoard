@@ -5,6 +5,7 @@ import AdminHeader from '@/components/admin/AdminHeader';
 import AISettings from '@/components/admin/AISettings';
 import AIResidents from '@/components/admin/AIResidents';
 import HumanRoster from '@/components/admin/HumanRoster';
+import AIDiagnose from '@/components/admin/AIDiagnose';
 import BoardAdmin from '@/components/admin/BoardAdmin';
 
 /**
@@ -57,6 +58,7 @@ export default function AdminPage() {
           />
         </section>
 
+        <AIDiagnose />
         <AISettings currentAIDensity={aiDensity} />
         <HumanRoster />
         <AIResidents />

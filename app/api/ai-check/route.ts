@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
 
     // AI密度チェック（設定値を使用）
     if (posts.length > 0 && aiPosts.length / posts.length > config.max_ai_density) {
-      return NextResponse.json({ shouldPost: false });
+      return NextResponse.json({ shouldPost: false, reason: 'density_exceeded' });
     }
 
     // 確率的介入（設定値を使用）
@@ -113,7 +113,12 @@ export async function POST(request: NextRequest) {
 
     const probability = probabilities[state] || 0;
     if (Math.random() >= probability) {
-      return NextResponse.json({ shouldPost: false });
+      return NextResponse.json({
+        shouldPost: false,
+        reason: 'probability_not_met',
+        state,
+        probability,
+      });
     }
 
     const lastPost = posts[0];
@@ -374,6 +379,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('AI check error:', error);
-    return NextResponse.json({ shouldPost: false });
+    return NextResponse.json({
+      shouldPost: false,
+      reason: 'error',
+      message: error instanceof Error ? error.message : 'unknown',
+    });
   }
 }
