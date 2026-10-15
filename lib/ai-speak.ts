@@ -27,6 +27,9 @@ import { maybeCreateBoard } from './ai-board';
  * GPTを呼ぶのは、この4つを抜けたときだけ。
  */
 
+/** AI密度を見る範囲。板の全履歴ではなく直近この件数で見る */
+const DENSITY_WINDOW = 20;
+
 export interface AIConfig {
   cooldown_min: number;
   cooldown_max: number;
@@ -320,11 +323,41 @@ async function speakOnClaimedBoard(
     .limit(40);
 
   const posts = (postRows || []) as Post[];
-  const aiPosts = posts.filter((p) => p.author_type === 'ai');
   const state = detectSpaceState(posts);
 
-  // AI密度
-  if (posts.length > 0 && aiPosts.length / posts.length > config.max_ai_density) {
+  // 閉じられた板には書かない。
+  // board_ai_state の行は板を閉じても残るので、ここで見ないと
+  // 一覧から下がった板にAIだけが書き続ける。
+  const { data: board } = await supabase
+    .from('boards')
+    .select('title, description, archived')
+    .eq('id', boardId)
+    .single();
+
+  if (!board || board.archived) {
+    return { boardId, posted: false, reason: 'board_closed', state };
+  }
+
+  /**
+   * AI密度。
+   *
+   * 板の全履歴で見てはいけない。小さい板では、AIが一度半分を超えると
+   * 人が書き足すまで永久に黙る。実際、人9件・AI5件の板が
+   * 「上限0.5を超えている」として何時間も止まっていた。
+   *
+   * 見るのは直近20件だけにする。AIが続けて書けば止まり、
+   * 人が書けばまた書けるようになる、という動きになる。
+   */
+  const window = posts.slice(0, DENSITY_WINDOW);
+  const aiInWindow = window.filter((p) => p.author_type === 'ai').length;
+  const density = window.length > 0 ? aiInWindow / window.length : 0;
+
+  // 板ごと止まって長い場合は、密度を理由に黙らない。
+  // 誰も書かないまま閉じていく板を、密度の計算で看取る理由はない。
+  const lastPostAt = posts[0]?.created_at ?? 0;
+  const dormant = lastPostAt > 0 && now - lastPostAt > config.ai_board_interval_quiet * 4;
+
+  if (!dormant && density > config.max_ai_density) {
     return { boardId, posted: false, reason: 'density_exceeded', state };
   }
 
@@ -381,12 +414,6 @@ async function speakOnClaimedBoard(
   if (!aiCharacter) {
     return { boardId, posted: false, reason: 'all_ais_in_cooldown', state };
   }
-
-  const { data: board } = await supabase
-    .from('boards')
-    .select('title, description')
-    .eq('id', boardId)
-    .single();
 
   // 返信にするか、新しく立てるか
   const lastPost = posts[0];
