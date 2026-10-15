@@ -6,6 +6,7 @@ import { buildResidentPrompt } from './prompt';
 import { ensureAIPopulation } from './ai-population';
 import { shouldAIReact, selectRandomEmoji } from './ai-manager';
 import { generateMatchingImage, searchAndComment, type ExtraResult } from './ai-extra';
+import { maybeCreateBoard } from './ai-board';
 
 /**
  * 板ごとの自立発言。
@@ -51,6 +52,9 @@ export interface AIConfig {
   ai_image_daily_budget: number;
   ai_search_followup_probability: number;
   ai_search_daily_budget: number;
+  ai_board_creation_probability: number;
+  ai_board_creation_daily_budget: number;
+  ai_max_boards: number;
   [key: string]: unknown;
 }
 
@@ -79,6 +83,9 @@ const DEFAULTS: AIConfig = {
   ai_image_daily_budget: 2,
   ai_search_followup_probability: 0.08,
   ai_search_daily_budget: 5,
+  ai_board_creation_probability: 0.05,
+  ai_board_creation_daily_budget: 1,
+  ai_max_boards: 12,
 };
 
 export interface SpeakOutcome {
@@ -164,7 +171,7 @@ export async function pickDueBoards(limit: number, exclude: string[] = []): Prom
 export async function runAITick(options: {
   boardId?: string;
   backgroundBoards?: number;
-}): Promise<{ outcomes: SpeakOutcome[]; budgetLeft: number }> {
+}): Promise<{ outcomes: SpeakOutcome[]; budgetLeft: number; createdBoard?: string | null }> {
   const config = await loadAIConfig();
   let budgetLeft = await remainingBudget(config);
 
@@ -192,7 +199,17 @@ export async function runAITick(options: {
     if (outcome.posted) budgetLeft--;
   }
 
-  return { outcomes, budgetLeft };
+  // ごくたまに、新しい板が立つ。条件は lib/ai-board.ts 側で厳しく見る
+  let createdBoard: string | null = null;
+  if (budgetLeft > 0) {
+    const created = await maybeCreateBoard(config);
+    if (created) {
+      createdBoard = created.title;
+      budgetLeft -= 2; // 板の案と最初の一行で2回
+    }
+  }
+
+  return { outcomes, budgetLeft, createdBoard };
 }
 
 /** 1つの板について、書くかどうかを決めて、書くなら書く */

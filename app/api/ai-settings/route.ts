@@ -49,6 +49,10 @@ const ALLOWED_FIELDS = [
   'ai_image_daily_budget',
   'ai_search_followup_probability',
   'ai_search_daily_budget',
+  // 第8次マイグレーションで入る列（AIが板を立てる）
+  'ai_board_creation_probability',
+  'ai_board_creation_daily_budget',
+  'ai_max_boards',
 ];
 
 export async function GET() {

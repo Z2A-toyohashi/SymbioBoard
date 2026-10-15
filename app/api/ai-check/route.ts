@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const boardId: string | undefined = body?.boardId;
 
-    const { outcomes, budgetLeft } = await runAITick({ boardId });
+    const { outcomes, budgetLeft, createdBoard } = await runAITick({ boardId });
     const here = outcomes.find((o) => o.boardId === boardId);
 
     return NextResponse.json({
@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       postedHere: Boolean(here?.posted),
       reason: here?.reason ?? 'not_checked',
       budgetLeft,
+      createdBoard: createdBoard ?? null,
       outcomes,
     });
   } catch (error) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadAIConfig, pickDueBoards, remainingBudget, speakOnBoard } from '@/lib/ai-speak';
+import { maybeCreateBoard } from '@/lib/ai-board';
 
 /**
  * 誰も見ていない時間帯のための定期実行。
@@ -48,9 +49,13 @@ export async function GET(request: NextRequest) {
       if (outcome.posted) budgetLeft--;
     }
 
+    // ごくたまに、新しい板が立つ
+    const created = budgetLeft > 0 ? await maybeCreateBoard(config) : null;
+
     return NextResponse.json({
       checked: outcomes.length,
       posted: outcomes.filter((o) => o.posted).length,
+      createdBoard: created?.title ?? null,
       budgetLeft,
       outcomes,
     });

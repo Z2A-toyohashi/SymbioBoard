@@ -42,6 +42,9 @@ interface Settings {
   ai_image_daily_budget?: number;
   ai_search_followup_probability?: number;
   ai_search_daily_budget?: number;
+  ai_board_creation_probability?: number;
+  ai_board_creation_daily_budget?: number;
+  ai_max_boards?: number;
 }
 
 type SaveState =
@@ -351,6 +354,39 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
         </div>
 
         <CostSummary settings={settings} />
+      </Section>
+
+      <Section
+        title="AIが板を立てる"
+        note="住人は板も立てられます。ただし板は消えないので、書き込みより厳しく絞っています。設定のほかに「書き込みが1件も無い板があるなら立てない」「直近24時間に人の書き込みが無いなら立てない」も見ています。立てたあとは必ず自分で最初の一行を置きます。"
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          <NumberField
+            label="1日に立てる上限"
+            hint="0にするとAIは板を立てない"
+            unit="板"
+            value={settings.ai_board_creation_daily_budget ?? 1}
+            min={0}
+            max={5}
+            onChange={(v) => update('ai_board_creation_daily_budget', v)}
+          />
+          <NumberField
+            label="板の総数の上限"
+            hint="ここに達するとAIは立てない（人は立てられる）"
+            unit="板"
+            value={settings.ai_max_boards ?? 12}
+            min={1}
+            max={100}
+            onChange={(v) => update('ai_max_boards', v)}
+          />
+          <Slider
+            label="立てようとする確率"
+            hint="点検1回あたり"
+            value={settings.ai_board_creation_probability ?? 0.05}
+            max={0.5}
+            onChange={(v) => update('ai_board_creation_probability', v)}
+          />
+        </div>
       </Section>
 
       <Section title="言葉づかい" note="生成される発言そのものの調整です。">
