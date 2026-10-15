@@ -5,6 +5,7 @@ import { generateAIResponseWithGPT } from './gpt';
 import { buildResidentPrompt } from './prompt';
 import { ensureAIPopulation } from './ai-population';
 import { shouldAIReact, selectRandomEmoji } from './ai-manager';
+import { generateMatchingImage, searchAndComment, type ExtraResult } from './ai-extra';
 
 /**
  * 板ごとの自立発言。
@@ -43,6 +44,13 @@ export interface AIConfig {
   ai_board_interval_quiet: number;
   ai_board_active_window: number;
   ai_background_boards: number;
+  gpt_model: string;
+  image_model: string;
+  image_quality: string;
+  ai_image_followup_probability: number;
+  ai_image_daily_budget: number;
+  ai_search_followup_probability: number;
+  ai_search_daily_budget: number;
   [key: string]: unknown;
 }
 
@@ -64,6 +72,13 @@ const DEFAULTS: AIConfig = {
   ai_board_interval_quiet: 10800000,
   ai_board_active_window: 1800000,
   ai_background_boards: 1,
+  gpt_model: 'gpt-4.1-mini',
+  image_model: 'gpt-image-1',
+  image_quality: 'medium',
+  ai_image_followup_probability: 0.05,
+  ai_image_daily_budget: 2,
+  ai_search_followup_probability: 0.08,
+  ai_search_daily_budget: 5,
 };
 
 export interface SpeakOutcome {
@@ -253,7 +268,15 @@ async function speakOnClaimedBoard(
   };
   const probability = probabilities[state] ?? 0;
   if (Math.random() >= probability) {
-    return { boardId, posted: false, reason: 'probability_not_met', state };
+    // 書かないときでも、スタンプだけ押していくことがある。
+    // 生成を伴わないので費用はかからず、「見ている人がいる」感じだけが残る。
+    const reacted = await reactSometimes(posts, state);
+    return {
+      boardId,
+      posted: false,
+      reason: reacted ? 'reacted_only' : 'probability_not_met',
+      state,
+    };
   }
 
   // ここから先は書くつもりで進む。住人が足りなければ増やす。
@@ -320,24 +343,11 @@ async function speakOnClaimedBoard(
       config.max_response_length,
       config.gpt_temperature,
       config.gpt_presence_penalty,
-      config.gpt_frequency_penalty
+      config.gpt_frequency_penalty,
+      config.gpt_model
     );
 
-  // ニュースと画像は新しくスレッドを立てるときだけ。どちらも確率で起きる。
-  // 失敗したら普通のテキストに戻す（黙るほどのことではない）
-  let content: string | null;
-  let mediaUrl: string | null = null;
-  let isNewsPost = false;
-
-  const special = thread_id ? null : await trySpecialPost(aiCharacter);
-
-  if (special?.content) {
-    content = special.content;
-    mediaUrl = special.mediaUrl;
-    isNewsPost = special.isNews;
-  } else {
-    content = await writeNormally();
-  }
+  const content = await writeNormally();
 
   // 生成に失敗したときは書かない。
   // 中身の無い相槌を板に残すより、黙っているほうが場が保たれる。
@@ -348,12 +358,12 @@ async function speakOnClaimedBoard(
   const post: Post = {
     id: `ai-${now}-${Math.random().toString(36).slice(2, 8)}`,
     content,
-    type: mediaUrl ? 'image' : 'text',
+    type: 'text',
     created_at: Date.now(),
     thread_id,
     author_type: 'ai',
     author_id: aiCharacter.id,
-    media_url: mediaUrl,
+    media_url: null,
     board_id: boardId,
   };
 
@@ -381,8 +391,6 @@ async function speakOnClaimedBoard(
         board_id: boardId,
         is_reply: Boolean(thread_id),
         used_gpt: true,
-        has_generated_image: Boolean(mediaUrl),
-        is_news_post: isNewsPost,
         probability,
         ai_character: aiCharacter.name,
       },
@@ -390,23 +398,26 @@ async function speakOnClaimedBoard(
     },
   ]);
 
-  // リアクションは生成を伴わないので、費用の枠とは別で扱う
-  if (shouldAIReact(state) && lastPost) {
-    const reactingAI = characters[Math.floor(Math.random() * characters.length)];
-    await ensureAIUser(reactingAI.id as string);
-    const { error: reactionError } = await supabase.from('reactions').insert([
-      {
-        post_id: lastPost.id,
-        user_id: reactingAI.id,
-        emoji: selectRandomEmoji(),
-        created_at: Date.now(),
-      },
-    ]);
-    // 同じ絵文字が既に付いている場合は一意制約で弾かれる。書き込み自体は成立している
-    if (reactionError) console.error('AI reaction failed:', reactionError.message);
-  }
+  // たまに、いま書いたことに合う写真を貼る／調べた話を続ける
+  const followUp = await maybeFollowUp({
+    parent: post,
+    boardId,
+    boardTitle: board?.title,
+    character: aiCharacter,
+    config,
+  });
 
-  return { boardId, posted: true, reason: 'posted', content, aiId: aiCharacter.id, state };
+  // リアクションは生成を伴わないので、費用の枠とは別で扱う
+  await reactSometimes(posts, state);
+
+  return {
+    boardId,
+    posted: true,
+    reason: followUp ? `posted+${followUp}` : 'posted',
+    content,
+    aiId: aiCharacter.id,
+    state,
+  };
 }
 
 /**
@@ -459,56 +470,164 @@ function pickCharacter(
 }
 
 /**
- * ニュースや画像を持ってくる住人のための寄り道。
+ * 書いたあとの寄り道。
  *
- * どちらも外部APIを叩くぶん高くつくので、新しくスレッドを立てるときだけ、
- * その住人に許可があり、かつ確率に当たったときに限る。
- * 失敗したら null を返して、呼び出し側で普通のテキストに戻す。
+ * たまに、いま書いたことに合う写真を貼ったり、気になって調べた話を続けたりする。
+ * どちらも本文への返信として、少し間を置いて置かれる。
+ *
+ * 蓋は三重。確率（既定5〜8%）、1日の枚数・回数、そして住人ごとの許可。
+ * 画像は1枚が本文1回の百倍以上かかるので、枚数の上限は本文とは別に持つ。
  */
-async function trySpecialPost(
-  character: AICharacterRow
-): Promise<{ content: string; mediaUrl: string | null; isNews: boolean } | null> {
-  const base = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+async function maybeFollowUp(args: {
+  parent: Post;
+  boardId: string;
+  boardTitle?: string;
+  character: AICharacterRow;
+  config: AIConfig;
+}): Promise<'image' | 'search' | null> {
+  const { parent, boardId, boardTitle, character, config } = args;
 
-  if (character.can_fetch_news && Math.random() < (character.news_fetch_probability ?? 0.1)) {
-    try {
-      const res = await fetch(`${base}/api/fetch-news`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aiCharacterId: character.id }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.comment) return { content: data.comment, mediaUrl: null, isNews: true };
-      }
-    } catch (error) {
-      console.error('News fetch failed:', error);
-    }
+  // 住人ごとの設定は「上乗せ」として扱う。
+  // 許可が付いている住人はよく貼り、付いていない住人もまれに貼る。
+  const imageChance = character.can_generate_images
+    ? Math.max(config.ai_image_followup_probability, character.image_generation_probability ?? 0)
+    : config.ai_image_followup_probability;
+
+  const searchChance = character.can_fetch_news
+    ? Math.max(config.ai_search_followup_probability, character.news_fetch_probability ?? 0)
+    : config.ai_search_followup_probability;
+
+  let extra: ExtraResult | null = null;
+  let kind: 'image' | 'search' | null = null;
+
+  if (Math.random() < imageChance && (await withinDailyLimit('image', config))) {
+    extra = await generateMatchingImage({
+      postContent: parent.content,
+      characterPrompt: character.system_prompt,
+      characterId: character.id,
+      boardTitle,
+      model: config.image_model,
+      quality: config.image_quality,
+      maxLength: config.max_response_length,
+    });
+    kind = extra ? 'image' : null;
+  }
+
+  if (!extra && Math.random() < searchChance && (await withinDailyLimit('search', config))) {
+    extra = await searchAndComment({
+      postContent: parent.content,
+      characterPrompt: character.system_prompt,
+      boardTitle,
+      model: config.gpt_model,
+      maxLength: Math.max(config.max_response_length, 80),
+    });
+    kind = extra ? 'search' : null;
+  }
+
+  if (!extra || !kind) return null;
+
+  const now = Date.now();
+  const followUp: Post = {
+    id: `ai-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    content: extra.content,
+    type: extra.mediaUrl ? 'image' : 'text',
+    created_at: now,
+    // 自分の書き込みへの返信として置く。独立した投稿にすると脈絡が切れる
+    thread_id: parent.thread_id || parent.id,
+    author_type: 'ai',
+    author_id: character.id,
+    media_url: extra.mediaUrl,
+    board_id: boardId,
+  };
+
+  const { error } = await supabase.from('posts').insert([followUp]);
+  if (error) {
+    console.error('Follow-up post failed:', error.message);
     return null;
   }
 
-  if (
-    character.can_generate_images &&
-    Math.random() < (character.image_generation_probability ?? 0.05)
-  ) {
-    try {
-      const res = await fetch(`${base}/api/generate-image`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aiCharacterId: character.id }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.comment && data.imageUrl) {
-          return { content: data.comment, mediaUrl: data.imageUrl, isNews: false };
-        }
-      }
-    } catch (error) {
-      console.error('Image generation failed:', error);
-    }
+  await supabase.from('logs').insert([
+    {
+      event_type: kind === 'image' ? 'ai_image' : 'ai_search',
+      user_id: character.id,
+      post_id: followUp.id,
+      metadata: {
+        board_id: boardId,
+        parent_post_id: parent.id,
+        content: extra.content,
+        model: kind === 'image' ? config.image_model : config.gpt_model,
+        quality: kind === 'image' ? config.image_quality : null,
+      },
+      created_at: now,
+    },
+  ]);
+
+  return kind;
+}
+
+/** 今日の枚数・回数がまだ残っているか */
+async function withinDailyLimit(kind: 'image' | 'search', config: AIConfig): Promise<boolean> {
+  const limit = kind === 'image' ? config.ai_image_daily_budget : config.ai_search_daily_budget;
+  if (limit <= 0) return false;
+
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const { count } = await supabase
+    .from('logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_type', kind === 'image' ? 'ai_image' : 'ai_search')
+    .gte('created_at', startOfDay.getTime());
+
+  return (count || 0) < limit;
+}
+
+/**
+ * スタンプを押す。
+ *
+ * 書き込みと違って生成を伴わないので、API費用はかからない。
+ * 板の空気（しずか・ひとりごとほど押しやすい）で確率が変わる。
+ *
+ * 押す先は人の書き込みを優先する。AI同士で押し合っても場は温まらないし、
+ * 押された側からすると「誰かが見ている」ことだけが伝わればよい。
+ */
+async function reactSometimes(posts: Post[], state: string): Promise<boolean> {
+  if (!shouldAIReact(state)) return false;
+
+  // 直近の書き込みから、人が書いたものを優先して選ぶ
+  const recent = posts.slice(0, 8);
+  const humanPosts = recent.filter((p) => p.author_type === 'user');
+  const pool = humanPosts.length > 0 ? humanPosts : recent;
+  if (pool.length === 0) return false;
+
+  const target = pool[Math.floor(Math.random() * pool.length)];
+
+  const { data: characters } = await supabase.from('ai_characters').select('id');
+  if (!characters || characters.length === 0) return false;
+
+  // 自分の書き込みには押さない
+  const others = characters.filter((c) => (c.id as string) !== target.author_id);
+  if (others.length === 0) return false;
+
+  const reactingAI = others[Math.floor(Math.random() * others.length)].id as string;
+  await ensureAIUser(reactingAI);
+
+  const { error } = await supabase.from('reactions').insert([
+    {
+      post_id: target.id,
+      user_id: reactingAI,
+      emoji: selectRandomEmoji(),
+      created_at: Date.now(),
+    },
+  ]);
+
+  // 同じ絵文字が既に押されている場合は一意制約で弾かれる。異常ではない
+  if (error && !error.message.includes('duplicate')) {
+    console.error('AI reaction failed:', error.message);
+    return false;
   }
 
-  return null;
+  return !error;
 }
 
 async function ensureAIUser(aiId: string): Promise<void> {

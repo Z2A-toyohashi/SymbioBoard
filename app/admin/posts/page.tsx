@@ -8,12 +8,14 @@ import { getUserColor, formatTime } from '@/lib/utils';
 
 interface PostWithDetails extends Post {
   reply_count?: number;
-  reactions?: Record<string, { count: number; users: Array<{ id: string; isAI: boolean }> }>;
+  reactions?: Record<string, { count: number; users: Array<{ id: string }> }>;
 }
 
 export default function PostsPage() {
   const [posts, setPosts] = useState<PostWithDetails[]>([]);
   const [filter, setFilter] = useState<'all' | 'user' | 'ai'>('all');
+  // どのIDがAIかは管理画面でだけ分かればよい。板には出さない
+  const [aiIds, setAiIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalPosts: 0,
@@ -35,6 +37,15 @@ export default function PostsPage() {
       const res = await fetch('/api/posts');
       const data = await res.json();
       const allPosts: Post[] = data.posts || [];
+
+      // AIの判定は住人名簿から引く。
+      // 以前はIDが 'ai-' で始まるかで見ていたが、AIのIDも4桁の数字に揃えた
+      const charactersRes = await fetch('/api/ai-characters');
+      const charactersData = await charactersRes.json();
+      const ids = new Set<string>(
+        (charactersData.characters || []).map((c: { id: string }) => c.id)
+      );
+      setAiIds(ids);
 
       const userPosts = allPosts.filter((p) => p.author_type === 'user');
       const aiPosts = allPosts.filter((p) => p.author_type === 'ai');
@@ -260,7 +271,7 @@ export default function PostsPage() {
                                             style={{ backgroundColor: getUserColor(user.id) }}
                                           />
                                           <span>{user.id}</span>
-                                          {user.isAI && (
+                                          {aiIds.has(user.id) && (
                                             <span className="text-[10px] bg-indigo-500 px-1.5 py-0.5 ">
                                               🤖
                                             </span>

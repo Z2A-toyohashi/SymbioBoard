@@ -41,6 +41,14 @@ const ALLOWED_FIELDS = [
   'ai_board_interval_quiet',
   'ai_board_active_window',
   'ai_background_boards',
+  // 第6次マイグレーションで入る列（モデルと、書いたあとの寄り道）
+  'gpt_model',
+  'image_model',
+  'image_quality',
+  'ai_image_followup_probability',
+  'ai_image_daily_budget',
+  'ai_search_followup_probability',
+  'ai_search_daily_budget',
 ];
 
 export async function GET() {

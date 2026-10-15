@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { SPACE_STATE_LABEL } from '@/types';
+import { MODELS, estimateMonthlyCost, isReasoningModel } from '@/lib/ai-cost';
 
 /**
  * 場の設定。
@@ -34,6 +35,13 @@ interface Settings {
   ai_board_interval_quiet?: number;
   ai_board_active_window?: number;
   ai_background_boards?: number;
+  gpt_model?: string;
+  image_model?: string;
+  image_quality?: string;
+  ai_image_followup_probability?: number;
+  ai_image_daily_budget?: number;
+  ai_search_followup_probability?: number;
+  ai_search_daily_budget?: number;
 }
 
 type SaveState =
@@ -255,6 +263,96 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
         </div>
       </Section>
 
+      <Section
+        title="モデルと費用"
+        note="上限まで使い切った場合の月額をその場で出します。実際には確率で外れる日が多いので、これより安くなります。単価は2026年10月時点の目安で、請求はOpenAIのダッシュボードが正です。"
+      >
+        <label className="block">
+          <span className="mz-ink text-[13px] font-semibold">本文を書くモデル</span>
+          <select
+            value={settings.gpt_model ?? 'gpt-4.1-mini'}
+            onChange={(e) => update('gpt_model', e.target.value)}
+            className="mz-field mt-1 w-full text-[13px]"
+          >
+            {MODELS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <span className="mz-ink-faint mt-1 block text-[12px] leading-relaxed">
+            {MODELS.find((m) => m.id === (settings.gpt_model ?? 'gpt-4.1-mini'))?.note}
+          </span>
+        </label>
+
+        {isReasoningModel(settings.gpt_model ?? '') && (
+          <p className="mz-ink-sub mt-2 text-[12px] leading-relaxed">
+            このモデルでは「ばらつき」の設定は無視されます。考えたぶんも出力として課金されるので、
+            見積もりより高くなることがあります。
+          </p>
+        )}
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mz-ink text-[13px] font-semibold">画像のモデル</span>
+            <select
+              value={settings.image_model ?? 'gpt-image-1'}
+              onChange={(e) => update('image_model', e.target.value)}
+              className="mz-field mt-1 w-full text-[13px]"
+            >
+              <option value="gpt-image-1">gpt-image-1</option>
+              <option value="dall-e-3">dall-e-3</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mz-ink text-[13px] font-semibold">画像の品質</span>
+            <select
+              value={settings.image_quality ?? 'medium'}
+              onChange={(e) => update('image_quality', e.target.value)}
+              className="mz-field mt-1 w-full text-[13px]"
+            >
+              <option value="low">低（安い）</option>
+              <option value="medium">中</option>
+              <option value="high">高（1枚が高い）</option>
+            </select>
+          </label>
+          <NumberField
+            label="1日に作る画像の上限"
+            hint="本文とは別枠。1枚で本文100回ぶん近くかかる"
+            unit="枚"
+            value={settings.ai_image_daily_budget ?? 2}
+            min={0}
+            max={50}
+            onChange={(v) => update('ai_image_daily_budget', v)}
+          />
+          <NumberField
+            label="1日にwebを調べる上限"
+            hint="本文とは別枠。検索1回ぶんの料金がかかる"
+            unit="回"
+            value={settings.ai_search_daily_budget ?? 5}
+            min={0}
+            max={100}
+            onChange={(v) => update('ai_search_daily_budget', v)}
+          />
+          <Slider
+            label="写真を貼る確率"
+            hint="書き込んだあと、この確率で本文に合う写真を足す"
+            value={settings.ai_image_followup_probability ?? 0.05}
+            max={0.5}
+            onChange={(v) => update('ai_image_followup_probability', v)}
+          />
+          <Slider
+            label="調べて続ける確率"
+            hint="書き込んだあと、この確率でwebを調べて続きを書く"
+            value={settings.ai_search_followup_probability ?? 0.08}
+            max={0.5}
+            onChange={(v) => update('ai_search_followup_probability', v)}
+          />
+        </div>
+
+        <CostSummary settings={settings} />
+      </Section>
+
       <Section title="言葉づかい" note="生成される発言そのものの調整です。">
         <div className="grid gap-3 sm:grid-cols-2">
           <NumberField
@@ -323,6 +421,33 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
           <span className="mz-ink-faint text-[12px]">未保存の変更があります</span>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 上限まで使い切ったときの月額を出す。設定を動かすとその場で変わる */
+function CostSummary({ settings }: { settings: Settings }) {
+  const cost = estimateMonthlyCost({
+    model: settings.gpt_model ?? 'gpt-4.1-mini',
+    dailyBudget: settings.ai_daily_budget ?? 150,
+    imageModel: settings.image_model ?? 'gpt-image-1',
+    imageQuality: settings.image_quality ?? 'medium',
+    imageDailyBudget: settings.ai_image_daily_budget ?? 2,
+    searchDailyBudget: settings.ai_search_daily_budget ?? 5,
+  });
+
+  const yen = (v: number) => `¥${v.toLocaleString('ja-JP')}`;
+
+  return (
+    <div className="mz-surface-sub mz-border mt-4 rounded-[7px] border p-3">
+      <p className="mz-ink text-[13px] font-semibold">
+        上限まで使った場合の月額：{yen(cost.monthlyYen)}
+      </p>
+      <p className="mz-ink-sub mt-1 text-[12px] leading-relaxed">
+        本文 {yen(cost.textYen)}（1日{settings.ai_daily_budget ?? 150}回）／ 画像{' '}
+        {yen(cost.imageYen)}（1日{settings.ai_image_daily_budget ?? 2}枚）／ 検索{' '}
+        {yen(cost.searchYen)}（1日{settings.ai_search_daily_budget ?? 5}回）
+      </p>
     </div>
   );
 }

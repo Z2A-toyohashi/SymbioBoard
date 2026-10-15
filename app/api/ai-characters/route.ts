@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
 import { ensureAIPopulation } from '@/lib/ai-population';
+import { generateAICharacterId } from '@/lib/ai-id';
 
 /**
  * AI住人の一覧・追加・更新・削除。
@@ -53,7 +54,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '名前・性格・プロンプトは必須です' }, { status: 400 });
     }
 
-    const id = `manual-${Date.now().toString(36)}`;
+    // 自動生成の住人と同じく4桁の数字。板では末尾4桁しか出ない
+    const id = await generateAICharacterId();
+    if (!id) {
+      return NextResponse.json({ error: '空いているIDがありません' }, { status: 409 });
+    }
+
     const { data, error } = await supabase
       .from('ai_characters')
       .insert([

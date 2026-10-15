@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { Post } from '@/types';
 import { dropDanglingSentence, trimToNaturalEnd } from './text';
+import { isReasoningModel } from './ai-cost';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -13,12 +14,12 @@ export async function generateAIResponseWithGPT(
   maxLength: number = 30,
   temperature: number = 1.0,
   presencePenalty: number = 0.6,
-  frequencyPenalty: number = 0.6
+  frequencyPenalty: number = 0.6,
+  model: string = 'gpt-4.1-mini'
 ): Promise<string | null> {
   try {
-    // 画像があるかチェック
+    // 画像があるかチェック。モデルは設定から来る（画像付きでも同じものを使う）
     const hasImage = targetPost?.media_url;
-    const model = hasImage ? 'gpt-4o-mini' : 'gpt-4o-mini';
 
     let userMessage: string;
     const messages: Array<{
@@ -80,15 +81,25 @@ export async function generateAIResponseWithGPT(
       messages.push({ role: 'user', content: userMessage });
     }
 
+    // 文字数の上限は後段で見る。ここでは言い切れるだけの余白を渡す。
+    // 短く絞りすぎると毎回トークン上限で文が途切れる。
+    const budget = Math.min(400, Math.max(80, Math.ceil(maxLength * 2.5)));
+
+    // gpt-5 系は temperature などを受け付けず、送るとエラーで黙ってしまう。
+    // 考えるぶんの出力も要るので、上限は多めに渡す。
+    const tuning = isReasoningModel(model)
+      ? { max_completion_tokens: budget * 4 }
+      : {
+          temperature,
+          presence_penalty: presencePenalty,
+          frequency_penalty: frequencyPenalty,
+          max_tokens: budget,
+        };
+
     const response = await openai.chat.completions.create({
       model,
       messages: messages as any,
-      temperature: temperature,
-      // 文字数の上限は後段で見る。ここでは言い切れるだけの余白を渡す。
-      // 短く絞りすぎると毎回トークン上限で文が途切れる。
-      max_tokens: Math.min(400, Math.max(80, Math.ceil(maxLength * 2.5))),
-      presence_penalty: presencePenalty,
-      frequency_penalty: frequencyPenalty,
+      ...tuning,
     });
 
     const choice = response.choices[0];

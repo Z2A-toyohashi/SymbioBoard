@@ -17,26 +17,18 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    // ユーザー情報を取得してAIかどうか判定
-    const userIds = [...new Set(data?.map((r: any) => r.user_id) || [])];
-    const { data: users } = await supabase
-      .from('users')
-      .select('id')
-      .in('id', userIds);
-
-    const userSet = new Set(users?.map(u => u.id) || []);
-
-    // 絵文字ごとにグループ化
-    const grouped: Record<string, { count: number; users: Array<{ id: string; isAI: boolean }>; userReacted: boolean }> = {};
-    data?.forEach((reaction: any) => {
+    // 絵文字ごとにまとめる。
+    // 誰がAIかは返さない。板では人もAIも同じ資格で押しているので、
+    // 画面に出さないだけでなく、そもそもクライアントに渡さない。
+    // （以前は id が 'ai-' で始まるかで判定して isAI を返していたが、
+    //   AIのIDを4桁の数字に揃えたのでその判定自体が成り立たない）
+    const grouped: Record<string, { count: number; users: Array<{ id: string }> }> = {};
+    (data || []).forEach((reaction: { emoji: string; user_id: string }) => {
       if (!grouped[reaction.emoji]) {
-        grouped[reaction.emoji] = { count: 0, users: [], userReacted: false };
+        grouped[reaction.emoji] = { count: 0, users: [] };
       }
       grouped[reaction.emoji].count++;
-      grouped[reaction.emoji].users.push({
-        id: reaction.user_id,
-        isAI: reaction.user_id.startsWith('ai-'), // IDがai-で始まる場合はAI
-      });
+      grouped[reaction.emoji].users.push({ id: reaction.user_id });
     });
 
     return NextResponse.json({ reactions: grouped });

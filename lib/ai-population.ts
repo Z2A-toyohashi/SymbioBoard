@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { supabase } from './supabase-client';
+import { generateAICharacterId } from './ai-id';
 
 /**
  * AIの人口管理。
@@ -69,7 +70,13 @@ export async function ensureAIPopulation(
     const seed = await inventCharacter(taken);
     if (!seed) break;
 
-    const id = `auto-${Date.now().toString(36)}-${Math.floor(Math.random() * 1296).toString(36)}`;
+    // IDは人と同じく「末尾4桁」だけが板に出る。AIだけ形が違うと見分けがつく
+    const id = await generateAICharacterId();
+    if (!id) {
+      console.error('No free 4-digit ID left for a new AI character.');
+      break;
+    }
+
     const { error } = await supabase.from('ai_characters').insert([
       {
         id,
