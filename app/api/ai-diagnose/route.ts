@@ -104,7 +104,46 @@ export async function GET() {
     ? { ok: false, message: boardColError.message }
     : { ok: true };
 
-  // 5. 直近でAIが実際に書いた記録
+  // 5. 板ごとの自立発言まわり。migration-004 が入っているか、
+  //    今日の枠を使い切っていないか、次に様子を見るのはいつか
+  const now = Date.now();
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const { count: todayCount } = await supabase
+    .from('logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_type', 'ai_intervention')
+    .gte('created_at', startOfDay.getTime());
+
+  const { data: states, error: stateError } = await supabase
+    .from('board_ai_state')
+    .select('board_id, next_due_at, last_ai_post_at')
+    .order('next_due_at');
+
+  if (stateError) {
+    checks.board_autonomy = {
+      ok: false,
+      message: `board_ai_state を読めません（${stateError.message}）。migration-004-ai-autonomy.sql を実行してください。`,
+    };
+  } else {
+    const budget = (settings?.ai_daily_budget as number | undefined) ?? null;
+    checks.board_autonomy = {
+      ok: true,
+      daily_budget: budget,
+      used_today: todayCount || 0,
+      budget_left: budget === null ? null : Math.max(0, budget - (todayCount || 0)),
+      boards: (states || []).slice(0, 10).map((s) => ({
+        board_id: s.board_id as string,
+        due_in_minutes: Math.round((((s.next_due_at as number) || 0) - now) / 60000),
+        last_ai_post_minutes_ago: s.last_ai_post_at
+          ? Math.round((now - (s.last_ai_post_at as number)) / 60000)
+          : null,
+      })),
+    };
+  }
+
+  // 6. 直近でAIが実際に書いた記録
   const { data: logs } = await supabase
     .from('logs')
     .select('created_at, metadata')

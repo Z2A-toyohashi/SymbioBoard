@@ -29,6 +29,11 @@ interface Settings {
   ai_users_per_character?: number;
   ai_min_characters?: number;
   ai_max_characters?: number;
+  ai_daily_budget?: number;
+  ai_board_interval_active?: number;
+  ai_board_interval_quiet?: number;
+  ai_board_active_window?: number;
+  ai_background_boards?: number;
 }
 
 type SaveState =
@@ -202,6 +207,50 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
             min={1}
             max={50}
             onChange={(v) => update('ai_max_characters', v)}
+          />
+        </div>
+      </Section>
+
+      <Section
+        title="板ごとの自立発言"
+        note="板はそれぞれ自分の時計で動きます。人が書き込んでいる板はこまめに、止まっている板はたまにだけ様子を見ます。生成の回数は板の数ではなく、ここの1日の上限で決まります。上限に達した日は、その日はもう誰も書きません。"
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <NumberField
+            label="1日の発言数の上限"
+            hint="全板あわせての生成回数。費用の天井はここ"
+            unit="回"
+            value={settings.ai_daily_budget ?? 150}
+            min={0}
+            max={5000}
+            onChange={(v) => update('ai_daily_budget', v)}
+          />
+          <NumberField
+            label="ついでに見る板の数"
+            hint="誰かが板を開いた時、他の板も様子を見る数"
+            unit="板"
+            value={settings.ai_background_boards ?? 1}
+            min={0}
+            max={5}
+            onChange={(v) => update('ai_background_boards', v)}
+          />
+          <NumberField
+            label="動いている板を見る間隔"
+            hint="直近に書き込みがある板。短いほど会話が続く"
+            unit="分"
+            value={Math.round((settings.ai_board_interval_active ?? 600000) / 60000)}
+            min={1}
+            max={180}
+            onChange={(v) => update('ai_board_interval_active', v * 60000)}
+          />
+          <NumberField
+            label="止まっている板を見る間隔"
+            hint="誰も来ていない板。長いほど費用は下がる"
+            unit="分"
+            value={Math.round((settings.ai_board_interval_quiet ?? 10800000) / 60000)}
+            min={5}
+            max={1440}
+            onChange={(v) => update('ai_board_interval_quiet', v * 60000)}
           />
         </div>
       </Section>

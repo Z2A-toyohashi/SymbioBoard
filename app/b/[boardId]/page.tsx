@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import type { Board, Post } from '@/types';
 import { getUserId } from '@/lib/user';
 import { supabase } from '@/lib/supabase-client';
-import { randomDelay } from '@/lib/utils';
 import PostItem from '@/components/PostItem';
 import PostInput from '@/components/PostInput';
 import SiteHeader from '@/components/SiteHeader';
@@ -103,13 +102,26 @@ export default function BoardPage() {
     }
   }, [boardId, fetchPosts]);
 
-  // 住人の様子をうかがう。投稿が0件でも回すので、誰も書いていない板でも会話が始まる。
+  /**
+   * 住人の様子をうかがう。
+   *
+   * 判定も書き込みもサーバ側で完結するので、ここは「見ているよ」と
+   * 伝えるだけ。何人が同じ板を開いていても、生成は板ごとの間隔ぶんしか
+   * 走らない。書き込まれたぶんは購読側が拾う。
+   *
+   * 投稿件数に依らず回すので、誰も書いていない板でも会話が始まる。
+   */
   useEffect(() => {
     if (loading) return;
-    const timer = setInterval(() => checkAIIntervention(), 30000);
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      nudgeAI();
+    };
+    tick();
+    const timer = setInterval(tick, 60000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [posts, loading, boardId]);
+  }, [loading, boardId]);
 
   const handlePost = async (
     content: string,
@@ -157,43 +169,17 @@ export default function BoardPage() {
     setReplyToPost(rootPost);
   };
 
-  const checkAIIntervention = async () => {
+  const nudgeAI = async () => {
     try {
       const res = await fetch('/api/ai-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ posts, boardId }),
+        body: JSON.stringify({ boardId }),
       });
       const data = await res.json();
-      if (!data.shouldPost) return;
-
-      await randomDelay(5, 20);
-
-      const aiUserId = data.ai_id;
-      await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: aiUserId }),
-      });
-
-      const aiPost: Post = {
-        id: `ai-${Date.now()}-${Math.random()}`,
-        content: data.content,
-        type: data.media_url ? 'image' : 'text',
-        created_at: Date.now(),
-        thread_id: data.thread_id || null,
-        author_type: 'ai',
-        author_id: aiUserId,
-        media_url: data.media_url || null,
-        board_id: boardId,
-      };
-
-      await fetch('/api/posts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(aiPost),
-      });
-      await fetchPosts();
+      // この板に書き込まれたなら取り直す。購読が生きていれば二重になるが、
+      // 同じ内容で上書きされるだけなので画面は乱れない。
+      if (data.postedHere) await fetchPosts();
     } catch (error) {
       console.error('AI check failed:', error);
     }

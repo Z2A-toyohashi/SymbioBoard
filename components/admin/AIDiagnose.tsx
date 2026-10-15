@@ -104,6 +104,20 @@ function judge(r: Record<string, unknown>): { ok: boolean; message: string } {
     };
   }
 
+  const autonomy = r.board_autonomy as
+    | { ok?: boolean; message?: string; budget_left?: number | null }
+    | undefined;
+  if (autonomy && autonomy.ok === false) {
+    return { ok: false, message: autonomy.message ?? '板ごとの状態を読めません。' };
+  }
+  if (autonomy && autonomy.budget_left === 0) {
+    return {
+      ok: false,
+      message:
+        '今日の発言数の上限に達しています。設定通りに黙っています。「1日の発言数の上限」を上げるか、日付が変わるのを待ってください。',
+    };
+  }
+
   const settings = r.ai_settings as
     | { probabilities?: Record<string, number>; max_response_length?: number }
     | undefined;

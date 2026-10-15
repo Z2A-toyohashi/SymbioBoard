@@ -345,3 +345,32 @@ UPDATE posts SET board_id = 'zatsudan' WHERE board_id IS NULL;
 ALTER TABLE boards ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Enable all access" ON boards;
 CREATE POLICY "Enable all access" ON boards FOR ALL USING (true) WITH CHECK (true);
+
+-- ============================================================
+-- 板ごとの自立発言と、API費用の上限
+-- 既存DBには migration-004-ai-autonomy.sql として単体でも流せます。
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS board_ai_state (
+  board_id TEXT PRIMARY KEY REFERENCES boards(id) ON DELETE CASCADE,
+  last_ai_post_at BIGINT NOT NULL DEFAULT 0,
+  last_check_at BIGINT NOT NULL DEFAULT 0,
+  next_due_at BIGINT NOT NULL DEFAULT 0,
+  lease_until BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_board_ai_state_due ON board_ai_state(next_due_at);
+
+INSERT INTO board_ai_state (board_id)
+SELECT id FROM boards
+ON CONFLICT (board_id) DO NOTHING;
+
+ALTER TABLE ai_settings ADD COLUMN IF NOT EXISTS ai_daily_budget INTEGER NOT NULL DEFAULT 150;
+ALTER TABLE ai_settings ADD COLUMN IF NOT EXISTS ai_board_interval_active INTEGER NOT NULL DEFAULT 600000;
+ALTER TABLE ai_settings ADD COLUMN IF NOT EXISTS ai_board_interval_quiet INTEGER NOT NULL DEFAULT 10800000;
+ALTER TABLE ai_settings ADD COLUMN IF NOT EXISTS ai_board_active_window INTEGER NOT NULL DEFAULT 1800000;
+ALTER TABLE ai_settings ADD COLUMN IF NOT EXISTS ai_background_boards INTEGER NOT NULL DEFAULT 1;
+
+ALTER TABLE board_ai_state ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Enable all access" ON board_ai_state;
+CREATE POLICY "Enable all access" ON board_ai_state FOR ALL USING (true) WITH CHECK (true);

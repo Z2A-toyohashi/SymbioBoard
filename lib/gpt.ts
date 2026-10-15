@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import type { Post } from '@/types';
+import { dropDanglingSentence, trimToNaturalEnd } from './text';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -26,7 +27,12 @@ export async function generateAIResponseWithGPT(
     }> = [
       {
         role: 'system',
-        content: `${systemPrompt}\n\n重要: あなたの返信は、あなた自身の発言のみを含めてください。他のユーザーIDやコロン（:）を含めないでください。自然な会話口調で短く返信してください。`,
+        content:
+          `${systemPrompt}\n\n【書き方】\n` +
+          `- あなた自身の発言だけを書きます。他の人のIDやコロン（:）は含めません。\n` +
+          `- ${maxLength}文字以内、1〜2文。自然な会話口調で。\n` +
+          `- 言いかけで終わらせず、必ず最後まで言い切ります。` +
+          `収まりそうになければ、短い一文に言い換えてください。`,
       },
     ];
 
@@ -78,12 +84,15 @@ export async function generateAIResponseWithGPT(
       model,
       messages: messages as any,
       temperature: temperature,
-      max_tokens: 100,
+      // 文字数の上限は後段で見る。ここでは言い切れるだけの余白を渡す。
+      // 短く絞りすぎると毎回トークン上限で文が途切れる。
+      max_tokens: Math.min(400, Math.max(80, Math.ceil(maxLength * 2.5))),
       presence_penalty: presencePenalty,
       frequency_penalty: frequencyPenalty,
     });
 
-    const content = response.choices[0]?.message?.content?.trim();
+    const choice = response.choices[0];
+    const content = choice?.message?.content?.trim();
     if (!content) return null;
 
     // ユーザーIDとコロンを除去（例: "1234: " や "AI: " など）
@@ -94,8 +103,19 @@ export async function generateAIResponseWithGPT(
 
     if (!cleanedContent) return null;
 
-    // 設定された文字数以内に制限
-    return cleanedContent.slice(0, maxLength);
+    // トークン上限で止められた場合は、言いかけの最後の一文を落とす。
+    // 落とした結果なにも残らなければ書かない。
+    if (choice?.finish_reason === 'length') {
+      const settled = dropDanglingSentence(cleanedContent);
+      if (!settled) {
+        console.error('AI response was cut off mid-sentence. Skipping the post.');
+        return null;
+      }
+      return trimToNaturalEnd(settled, maxLength);
+    }
+
+    // 文の途中で切らずに、設定された文字数へ寄せる
+    return trimToNaturalEnd(cleanedContent, maxLength);
   } catch (error) {
     console.error('GPT API error:', error);
     // 生成に失敗したら null を返す。

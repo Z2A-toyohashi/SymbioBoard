@@ -35,6 +35,12 @@ const ALLOWED_FIELDS = [
   'ai_users_per_character',
   'ai_min_characters',
   'ai_max_characters',
+  // 第4次マイグレーションで入る列（板ごとの自立発言と費用の上限）
+  'ai_daily_budget',
+  'ai_board_interval_active',
+  'ai_board_interval_quiet',
+  'ai_board_active_window',
+  'ai_background_boards',
 ];
 
 export async function GET() {
