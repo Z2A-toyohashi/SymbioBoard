@@ -62,9 +62,11 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 最終書き込みが古い板を上に出す。書き込みのない板は先頭に来るので、
-    // 立てたばかりの板が埋もれずに最初の一行を呼び込める。
-    summaries.sort((a, b) => (a.last_post_at || 0) - (b.last_post_at || 0));
+    // 動きの新しい板が上。まだ書き込みのない板は開設日で見るので、
+    // 立てたばかりの板も上に出て、最初の一行を呼び込める。
+    summaries.sort(
+      (a, b) => (b.last_post_at || b.created_at) - (a.last_post_at || a.created_at)
+    );
 
     return NextResponse.json({ boards: summaries });
   } catch (error) {

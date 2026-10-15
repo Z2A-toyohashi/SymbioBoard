@@ -205,9 +205,14 @@ export default function BoardPage() {
    * スレッドと返信を分けず、書き込み順に1から番号を振る。
    * 返信も普通のレスとして同じ列に入り、宛先は >>番号 で示す（2ちゃんねると同じ）。
    * 番号は書き込み順に固定なので、あとから増えても既存の番号は動かない。
+   *
+   * 並べるのは新しいものが上。開いてすぐ最近の話が目に入るようにする。
+   * 番号と並びが逆向きになるが、番号は「何番目の書き込みか」を指すもので、
+   * 画面上の位置を指すものではない。
    */
-  const timeline = [...posts].sort((a, b) => a.created_at - b.created_at);
-  const numberOf = new Map(timeline.map((p, i) => [p.id, i + 1]));
+  const byTime = [...posts].sort((a, b) => a.created_at - b.created_at);
+  const numberOf = new Map(byTime.map((p, i) => [p.id, i + 1]));
+  const timeline = [...byTime].reverse();
 
   return (
     <div className="min-h-screen">
@@ -244,12 +249,12 @@ export default function BoardPage() {
               </div>
             ) : (
               <div className="mz-card mt-0 overflow-hidden rounded-none border-x-0 sm:mt-4 sm:rounded-[10px] sm:border-x">
-                {/* 上から書き込み順。返信もこの列に混ざる */}
-                {timeline.map((post, i) => (
+                {/* 新しいものが上。返信もこの列に混ざる */}
+                {timeline.map((post) => (
                   <PostItem
                     key={post.id}
                     post={post}
-                    index={i + 1}
+                    index={numberOf.get(post.id) ?? 0}
                     parentNumber={post.thread_id ? numberOf.get(post.thread_id) : undefined}
                     onReply={handleReply}
                     onJumpTo={jumpTo}
