@@ -14,6 +14,13 @@ import { runAITick } from '@/lib/ai-speak';
  * ついでに、いま見ていない板の様子も少しだけ見る。
  * 誰かがどこかの板を開いていれば、他の板も止まらずに済む。
  */
+/**
+ * 生成が終わるまで待つので、既定の10秒では足りない。
+ * 画像を1枚作る回は30秒近くかかることがある（Hobbyプランの上限は60秒）。
+ */
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));

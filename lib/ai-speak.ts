@@ -68,8 +68,8 @@ const DEFAULTS: AIConfig = {
   gpt_presence_penalty: 0.6,
   gpt_frequency_penalty: 0.6,
   ai_daily_budget: 150,
-  ai_board_interval_active: 600000,
-  ai_board_interval_quiet: 10800000,
+  ai_board_interval_active: 300000,
+  ai_board_interval_quiet: 1800000,
   ai_board_active_window: 1800000,
   ai_background_boards: 1,
   gpt_model: 'gpt-4.1-mini',
@@ -204,6 +204,24 @@ export async function speakOnBoard(boardId: string, config: AIConfig): Promise<S
     .from('board_ai_state')
     .upsert({ board_id: boardId }, { onConflict: 'board_id', ignoreDuplicates: true });
 
+  // 行が読めるかを先に確かめる。
+  // テーブルにRLSが有効でポリシーが無いと、読み書きはエラーにならず
+  // 「0行」として返る。そのまま進むと、取れるはずのない点検権を待ち続けて
+  // 板が永久に黙る。読めないと分かった時点で、状態なしの道に切り替える。
+  const { data: existing, error: readError } = await supabase
+    .from('board_ai_state')
+    .select('board_id')
+    .eq('board_id', boardId)
+    .maybeSingle();
+
+  if (readError || !existing) {
+    console.error(
+      'board_ai_state is not readable:',
+      readError?.message ?? '行が作られていません（RLSのポリシーを確認）'
+    );
+    return await speakWithoutState(boardId, config, now);
+  }
+
   // 点検の権利を1つだけ取る。
   // 「順番が来ている」かつ「誰も処理中でない」board_ai_state の行を
   // 1回のUPDATEで押さえる。取れなかった呼び出しはここで帰る。
@@ -216,8 +234,11 @@ export async function speakOnBoard(boardId: string, config: AIConfig): Promise<S
     .select('board_id');
 
   if (claimError) {
-    // マイグレーション未適用など。黙るのではなく理由を返す
-    return { boardId, posted: false, reason: `state_unavailable: ${claimError.message}` };
+    // board_ai_state が無い（migration-004 未適用）。
+    // ここで黙ってしまうと、マイグレーションを流すまで板が完全に止まる。
+    // 間隔の管理だけ落として、投稿そのものは続ける。
+    console.error('board_ai_state unavailable:', claimError.message);
+    return await speakWithoutState(boardId, config, now);
   }
   if (!claimed || claimed.length === 0) {
     return { boardId, posted: false, reason: 'not_due' };
@@ -235,6 +256,37 @@ export async function speakOnBoard(boardId: string, config: AIConfig): Promise<S
       .update({ lease_until: 0, next_due_at: now + interval })
       .eq('board_id', boardId);
   }
+}
+
+/**
+ * board_ai_state が無いときの代わりの道。
+ *
+ * 「次にいつ見るか」を保存できないので、その板で最後にAIが書いた時刻から
+ * 毎回計算し直す。二重起動も防げないが、板が止まるよりはいい。
+ * 理由に印を付けて返すので、点検画面でマイグレーション漏れだと分かる。
+ */
+async function speakWithoutState(
+  boardId: string,
+  config: AIConfig,
+  now: number
+): Promise<SpeakOutcome> {
+  const { data } = await supabase
+    .from('posts')
+    .select('created_at')
+    .eq('board_id', boardId)
+    .eq('author_type', 'ai')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  const lastAIPostAt = (data?.[0]?.created_at as number) || 0;
+  const interval = await nextInterval(boardId, config, now);
+
+  if (now - lastAIPostAt < interval) {
+    return { boardId, posted: false, reason: 'not_due (no board_ai_state)' };
+  }
+
+  const outcome = await speakOnClaimedBoard(boardId, config, now);
+  return { ...outcome, reason: `${outcome.reason} (no board_ai_state)` };
 }
 
 async function speakOnClaimedBoard(

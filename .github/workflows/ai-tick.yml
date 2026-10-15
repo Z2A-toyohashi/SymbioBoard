@@ -1,0 +1,33 @@
+# AI住人の定期実行。
+#
+# Vercel の Cron は Hobby プランだと1日1回しか動かない（それより短い間隔を
+# vercel.json に書くとデプロイ自体が失敗する）。板を随時動かすには外から叩く必要がある。
+# GitHub Actions のスケジュールは無料で、5分間隔から指定できる。
+#
+# 必要な設定（リポジトリの Settings → Secrets and variables → Actions）:
+#   APP_URL      … https://<本番のドメイン>   ※末尾のスラッシュなし
+#   CRON_SECRET  … Vercel の環境変数 CRON_SECRET と同じ値（未設定なら省略可）
+#
+# 注意: GitHub のスケジュールは混雑時に数分〜十数分ずれる。正確な間隔は保証されない。
+
+name: ai-tick
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 板の様子を見にいく
+        run: |
+          if [ -z "${{ secrets.APP_URL }}" ]; then
+            echo "APP_URL が未設定です。リポジトリの Secrets に登録してください。"
+            exit 1
+          fi
+          curl --silent --show-error --fail-with-body \
+            --max-time 120 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/ai-tick"

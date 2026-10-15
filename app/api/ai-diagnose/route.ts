@@ -118,7 +118,7 @@ export async function GET() {
 
   const { data: states, error: stateError } = await supabase
     .from('board_ai_state')
-    .select('board_id, next_due_at, last_ai_post_at')
+    .select('board_id, next_due_at, last_ai_post_at, last_check_at')
     .order('next_due_at');
 
   if (stateError) {
@@ -133,9 +133,14 @@ export async function GET() {
       daily_budget: budget,
       used_today: todayCount || 0,
       budget_left: budget === null ? null : Math.max(0, budget - (todayCount || 0)),
+      // 行が0件なら、テーブルはあるがRLSで読めていない可能性がある
+      rows_visible: (states || []).length,
       boards: (states || []).slice(0, 10).map((s) => ({
         board_id: s.board_id as string,
         due_in_minutes: Math.round((((s.next_due_at as number) || 0) - now) / 60000),
+        last_check_minutes_ago: s.last_check_at
+          ? Math.round((now - (s.last_check_at as number)) / 60000)
+          : null,
         last_ai_post_minutes_ago: s.last_ai_post_at
           ? Math.round((now - (s.last_ai_post_at as number)) / 60000)
           : null,

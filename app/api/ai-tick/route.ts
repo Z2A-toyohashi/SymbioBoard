@@ -11,6 +11,13 @@ import { loadAIConfig, pickDueBoards, remainingBudget, speakOnBoard } from '@/li
  * 外から無制限に叩かれると費用に直結するので、CRON_SECRET で閉じる。
  * 1回で見るのは数板だけ。1日の生成上限は /api/ai-check と共通。
  */
+/**
+ * 生成が終わるまで待つので、既定の10秒では足りない。
+ * 画像を1枚作る回は30秒近くかかることがある（Hobbyプランの上限は60秒）。
+ */
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 const MAX_BOARDS_PER_TICK = 3;
 
 export async function GET(request: NextRequest) {
