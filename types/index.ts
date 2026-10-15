@@ -7,6 +7,11 @@ export interface Board {
   created_by: string | null;
   is_default: boolean;
   archived: boolean;
+  /** 板ごとのAIの出方。null なら場の設定（ai_settings）に従う */
+  ai_max_density?: number | null;
+  ai_interval_active?: number | null;
+  ai_interval_quiet?: number | null;
+  ai_probability_scale?: number | null;
 }
 
 // 板一覧に出す集計情報つきの板

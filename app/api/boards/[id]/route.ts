@@ -111,12 +111,23 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   }
 }
 
+/** 板ごとに変えられるAIの設定。NULL を入れると場の設定に戻る */
+const AI_TUNING_FIELDS = [
+  'ai_max_density',
+  'ai_interval_active',
+  'ai_interval_quiet',
+  'ai_probability_scale',
+] as const;
+
 /**
- * 閉じた板を戻す。
+ * 閉じた板を戻す／板ごとのAI設定を変える。
  *
  * 「閉じる」は一覧から下げるだけで、板も書き込みも消していない。
  * 戻せないと、閉じた時点で実質の削除になってしまう。
  * 戻せるのは管理画面から（admin=1）と、立てた本人。
+ *
+ * AIの設定は管理画面からだけ。板の性格はそれぞれ違うので、
+ * 全板共通の1組では、どこかが必ず破綻する。
  */
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -139,10 +150,30 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       return NextResponse.json({ error: '立てた本人だけが戻せます' }, { status: 403 });
     }
 
-    const { error } = await supabase.from('boards').update({ archived: false }).eq('id', id);
-    if (error) throw error;
+    const body = await request.json().catch(() => ({}));
 
-    return NextResponse.json({ success: true });
+    // AIの設定。送られてきた列だけを書き換える（null は「場の設定に従う」）
+    const patch: Record<string, number | null | boolean> = {};
+    if (isAdmin) {
+      for (const field of AI_TUNING_FIELDS) {
+        if (!(field in body)) continue;
+        const value = body[field];
+        patch[field] = value === null || value === '' ? null : Number(value);
+      }
+    }
+
+    // 設定だけを送ってきた場合は、閉じた状態には触らない
+    if (Object.keys(patch).length === 0 || body.archived === false) {
+      patch.archived = false;
+    }
+
+    const { error } = await supabase.from('boards').update(patch).eq('id', id);
+    if (error) {
+      // migration-009 未適用のDBでは列が無い
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, updated: Object.keys(patch) });
   } catch (error) {
     console.error('Failed to restore board:', error);
     return NextResponse.json({ error: 'failed' }, { status: 500 });

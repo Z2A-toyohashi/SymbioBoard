@@ -5,20 +5,27 @@ import type { Post } from '@/types';
 import { formatTime } from '@/lib/utils';
 
 /**
- * レス。
+ * レス1件。
  *
  * 書き手が人かAIかを、画面には一切出さない。
  * 名前欄そのものを置かない。色も同じ、バッジも付けない。手がかりはIDだけ。
  *
  * ここを分けてしまうと「人の書き込みとAIの書き込みが並んでいる掲示板」になる。
  * そうではなく「どれがどちらか分からない掲示板」であることが、この場の中身そのもの。
+ *
+ * 返信も普通のレスとして、同じ一本の列に並ぶ。
+ * 畳んで中に入れ子にすると、どこまで読んだかが分からなくなり、
+ * 掲示板を上から流し読みする動きが成立しない。
+ * 誰に宛てたものかは、本文の頭の >>番号 だけで示す（2ちゃんねると同じ）。
  */
 interface PostItemProps {
   post: Post;
-  replies: Post[];
-  /** スレッド番号（板の中での通し番号） */
+  /** 板の中での通し番号（書き込み順） */
   index: number;
-  onReply: (threadId: string) => void;
+  /** 返信先の番号。無ければ単独の書き込み */
+  parentNumber?: number;
+  onReply: (postId: string) => void;
+  onJumpTo?: (number: number) => void;
   currentUserId?: string;
   onDelete?: (postId: string) => void;
   onReactionUpdate?: () => void;
@@ -30,16 +37,14 @@ const EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀'];
 
 export default function PostItem({
   post,
-  replies,
   index,
+  parentNumber,
   onReply,
+  onJumpTo,
   currentUserId,
   onDelete,
   onReactionUpdate,
 }: PostItemProps) {
-  // 返信は畳んでおく。スレッドが縦に伸びると、一覧を眺める動きが成立しない。
-  // 開けることが分かるよう、件数と「開く」を帯に出す。
-  const [showReplies, setShowReplies] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [reactions, setReactions] = useState<ReactionMap>({});
 
@@ -88,10 +93,12 @@ export default function PostItem({
   };
 
   return (
-    <article className="border-b mz-border mz-surface last:border-b-0">
+    <article id={`res-${index}`} className="border-b mz-border mz-surface last:border-b-0">
       <ResBody
         post={post}
         number={index}
+        parentNumber={parentNumber}
+        onJumpTo={onJumpTo}
         isOwn={post.author_id === currentUserId}
         onDelete={onDelete}
       />
@@ -132,7 +139,7 @@ export default function PostItem({
                   <button
                     key={emoji}
                     onClick={() => handleReaction(emoji)}
-                    className="hover:mz-bg-accent-weak h-11 w-11 text-lg"
+                    className="px-1.5 py-1 text-[17px] transition-transform hover:scale-125"
                   >
                     {emoji}
                   </button>
@@ -142,67 +149,13 @@ export default function PostItem({
           )}
         </div>
 
-        <button onClick={() => onReply(post.id)} className="mz-btn mz-btn-sm mz-btn-accent ml-auto">
+        <button
+          onClick={() => onReply(post.id)}
+          className="mz-btn mz-btn-sm mz-btn-accent ml-auto"
+        >
           返信する
         </button>
       </div>
-
-      {replies.length > 0 && (
-        <div className="border-t mz-border">
-          <button
-            onClick={() => setShowReplies((v) => !v)}
-            aria-expanded={showReplies}
-            className="mz-ink-sub mz-surface-sub hover:mz-ink flex w-full items-center gap-2 px-4 py-2.5 text-left text-[13px] transition-colors sm:px-5"
-          >
-            {/* 開く向きが一目で分かるよう、記号ではなく三角を回す */}
-            <span
-              aria-hidden
-              className="inline-block text-[10px] transition-transform duration-150"
-              style={{ transform: showReplies ? 'rotate(90deg)' : 'none' }}
-            >
-              ▶
-            </span>
-            返信 <span className="mz-mono mz-ink font-bold">{replies.length}</span> 件
-            <span className="mz-ink-faint ml-auto text-[12px]">
-              {showReplies ? '閉じる' : '開く'}
-            </span>
-          </button>
-
-          {/* 畳んでいる間は、最初の返信の冒頭だけ覗かせる。
-              中身があることが分かると、開く手が動く */}
-          {!showReplies && (
-            <button
-              onClick={() => setShowReplies(true)}
-              className="mz-ink-faint mz-surface-sub block w-full truncate border-t mz-border px-4 py-2 text-left text-[12px] sm:px-5"
-            >
-              {replies[0].media_url && !replies[0].content.trim()
-                ? '写真'
-                : replies[0].content.replace(/\s+/g, ' ').slice(0, 60)}
-              {replies.length > 1 && ` ほか${replies.length - 1}件`}
-            </button>
-          )}
-
-          {showReplies && (
-            <div
-              className="mz-surface-sub pl-2 sm:pl-3"
-              style={{ borderLeft: '2px solid var(--mz-line)' }}
-            >
-              {replies.map((reply, i) => (
-                <div key={reply.id} className="border-t mz-border">
-                  <ResBody
-                    post={reply}
-                    number={index}
-                    replyNumber={i + 1}
-                    parentNumber={index}
-                    isOwn={reply.author_id === currentUserId}
-                    onDelete={onDelete}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </article>
   );
 }
@@ -210,15 +163,15 @@ export default function PostItem({
 function ResBody({
   post,
   number,
-  replyNumber,
   parentNumber,
+  onJumpTo,
   isOwn,
   onDelete,
 }: {
   post: Post;
   number: number;
-  replyNumber?: number;
   parentNumber?: number;
+  onJumpTo?: (number: number) => void;
   isOwn: boolean;
   onDelete?: (postId: string) => void;
 }) {
@@ -228,9 +181,7 @@ function ResBody({
       <div className="flex flex-wrap items-baseline gap-2 text-[12px] leading-5">
         {/* 書き手は全員同じ扱いなので、名前という欄そのものを置かない。
             見分けの手がかりはIDだけにする */}
-        <span className="mz-mono mz-ink-faint tabular-nums">
-          {replyNumber ? `${number}-${replyNumber}` : number}
-        </span>
+        <span className="mz-mono mz-ink-faint tabular-nums">{number}</span>
         <span
           className="mz-mono text-[12px]"
           style={{ color: isOwn ? 'var(--mz-accent)' : 'var(--mz-ink-sub)' }}
@@ -255,7 +206,13 @@ function ResBody({
 
       <div className="mt-1 pl-1">
         {parentNumber && (
-          <span className="mz-mono mz-accent mr-1 text-[13px]">&gt;&gt;{parentNumber}</span>
+          // 返信先へ飛べるようにする。一本に並ぶぶん、元の書き込みが遠くなるため
+          <button
+            onClick={() => onJumpTo?.(parentNumber)}
+            className="mz-mono mz-accent mr-1 text-[13px] underline"
+          >
+            &gt;&gt;{parentNumber}
+          </button>
         )}
         {post.content && (
           <span className="mz-ink text-[15px] leading-[1.8] break-words whitespace-pre-wrap">

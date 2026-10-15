@@ -160,13 +160,27 @@ export default function BoardPage() {
     }
   };
 
+  /**
+   * 返信先は、押したレスそのもの。
+   *
+   * 以前はスレッドの先頭（ルート）に付け替えていた。折り畳みの中に
+   * ぶら下げる作りだったので、どのレスへの返信でも同じ束に入れる必要があった。
+   * 一本に並べるようになったいま、付け替える理由は無い。
+   * 誰に宛てたかは >>番号 で示す。
+   */
   const handleReply = (postId: string) => {
     const clicked = posts.find((p) => p.id === postId);
     if (!clicked) return;
-    const rootId = clicked.thread_id || clicked.id;
-    const rootPost = clicked.thread_id ? posts.find((p) => p.id === clicked.thread_id) : clicked;
-    setReplyTo(rootId);
-    setReplyToPost(rootPost);
+    setReplyTo(clicked.id);
+    setReplyToPost(clicked);
+  };
+
+  /** >>番号 を押したとき、その書き込みまで移動する */
+  const jumpTo = (number: number) => {
+    const el = document.getElementById(`res-${number}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('animate-fade-in');
   };
 
   const nudgeAI = async () => {
@@ -185,17 +199,15 @@ export default function BoardPage() {
     }
   };
 
-  const topLevelPosts = posts.filter((p) => !p.thread_id);
-
-  // 通し番号は書き込み順に振り、表示だけ新しい順にする。
-  // 並び順で番号が振り直されると、>>3 が別の投稿を指してしまう。
-  const numberedThreads = [...topLevelPosts]
-    .sort((a, b) => a.created_at - b.created_at)
-    .map((post, i) => ({ post, number: i + 1 }))
-    .reverse();
-
-  const getReplies = (threadId: string) =>
-    posts.filter((p) => p.thread_id === threadId).sort((a, b) => a.created_at - b.created_at);
+  /**
+   * 板の書き込みを一本に並べる。
+   *
+   * スレッドと返信を分けず、書き込み順に1から番号を振る。
+   * 返信も普通のレスとして同じ列に入り、宛先は >>番号 で示す（2ちゃんねると同じ）。
+   * 番号は書き込み順に固定なので、あとから増えても既存の番号は動かない。
+   */
+  const timeline = [...posts].sort((a, b) => a.created_at - b.created_at);
+  const numberOf = new Map(timeline.map((p, i) => [p.id, i + 1]));
 
   return (
     <div className="min-h-screen">
@@ -220,7 +232,7 @@ export default function BoardPage() {
 
             {loading ? (
               <div className="mz-ink-faint py-28 text-center text-[14px]">読み込み中…</div>
-            ) : topLevelPosts.length === 0 ? (
+            ) : timeline.length === 0 ? (
               <div className="mz-card mx-4 mt-8 px-6 py-16 text-center sm:mx-0">
                 <p className="mz-display mz-ink mb-2 text-[19px]">まだ誰も書いていません</p>
                 <p className="mz-ink-sub text-[13px] leading-relaxed">
@@ -232,15 +244,15 @@ export default function BoardPage() {
               </div>
             ) : (
               <div className="mz-card mt-0 overflow-hidden rounded-none border-x-0 sm:mt-4 sm:rounded-[10px] sm:border-x">
-                {/* 新しいスレッドが上。開いてすぐ最近の話が目に入る。
-                    通し番号は書き込み順のまま固定で、並べ替えても動かない */}
-                {numberedThreads.map(({ post, number }) => (
+                {/* 上から書き込み順。返信もこの列に混ざる */}
+                {timeline.map((post, i) => (
                   <PostItem
                     key={post.id}
                     post={post}
-                    index={number}
-                    replies={getReplies(post.id)}
+                    index={i + 1}
+                    parentNumber={post.thread_id ? numberOf.get(post.thread_id) : undefined}
                     onReply={handleReply}
+                    onJumpTo={jumpTo}
                     currentUserId={userId}
                     onReactionUpdate={fetchPosts}
                     onDelete={async (postId) => {

@@ -328,13 +328,9 @@ async function speakOnClaimedBoard(
   // 閉じられた板には書かない。
   // board_ai_state の行は板を閉じても残るので、ここで見ないと
   // 一覧から下がった板にAIだけが書き続ける。
-  const { data: board } = await supabase
-    .from('boards')
-    .select('title, description, archived')
-    .eq('id', boardId)
-    .single();
+  const board = await loadBoard(boardId);
 
-  if (!board || board.archived) {
+  if (!board.title || board.archived) {
     return { boardId, posted: false, reason: 'board_closed', state };
   }
 
@@ -352,12 +348,15 @@ async function speakOnClaimedBoard(
   const aiInWindow = window.filter((p) => p.author_type === 'ai').length;
   const density = window.length > 0 ? aiInWindow / window.length : 0;
 
+  // 板ごとの上限があればそれを使う。無ければ場の設定
+  const maxDensity = board.ai_max_density ?? config.max_ai_density;
+
   // 板ごと止まって長い場合は、密度を理由に黙らない。
   // 誰も書かないまま閉じていく板を、密度の計算で看取る理由はない。
   const lastPostAt = posts[0]?.created_at ?? 0;
   const dormant = lastPostAt > 0 && now - lastPostAt > config.ai_board_interval_quiet * 4;
 
-  if (!dormant && density > config.max_ai_density) {
+  if (!dormant && density > maxDensity) {
     return { boardId, posted: false, reason: 'density_exceeded', state };
   }
 
@@ -368,7 +367,10 @@ async function speakOnClaimedBoard(
     FRAGILE: config.prob_fragile,
     SOLO: config.prob_solo,
   };
-  const probability = probabilities[state] ?? 0;
+  // 板ごとの倍率。立てたばかりで誰もいない板は上げ、人が多い板は下げる
+  const scale = board.ai_probability_scale ?? 1;
+  const probability = Math.min(1, (probabilities[state] ?? 0) * scale);
+
   if (Math.random() >= probability) {
     // 書かないときでも、スタンプだけ押していくことがある。
     // 生成を伴わないので費用はかからず、「見ている人がいる」感じだけが残る。
@@ -437,13 +439,15 @@ async function speakOnClaimedBoard(
   const chance = target && target.author_type === 'user' ? base : base * 0.25;
   const shouldReply = Boolean(target) && Math.random() < chance;
 
-  const thread_id = shouldReply && target ? target.thread_id || target.id : null;
+  // 返信先はそのレス自身。板の表示が一本になったので、
+  // スレッドの先頭に付け替える必要はない（宛先は >>番号 で出る）
+  const thread_id = shouldReply && target ? target.id : null;
   const targetPost = shouldReply ? target : undefined;
 
   const systemPrompt = buildResidentPrompt({
     commonPrompt: config.system_prompt,
     characterPrompt: aiCharacter.system_prompt,
-    board: board ?? null,
+    board,
     posts,
     state,
     isReply: Boolean(thread_id),
@@ -555,16 +559,23 @@ ${photo.caption}` : content,
  * 0にはしない（既定では3時間に一度だけ様子を見る）。
  */
 async function nextInterval(boardId: string, config: AIConfig, now: number): Promise<number> {
-  const { data } = await supabase
-    .from('posts')
-    .select('created_at')
-    .eq('board_id', boardId)
-    .order('created_at', { ascending: false })
-    .limit(1);
+  const [{ data }, board] = await Promise.all([
+    supabase
+      .from('posts')
+      .select('created_at')
+      .eq('board_id', boardId)
+      .order('created_at', { ascending: false })
+      .limit(1),
+    loadBoard(boardId),
+  ]);
 
   const lastPostAt = (data?.[0]?.created_at as number) || 0;
   const active = now - lastPostAt < config.ai_board_active_window;
-  const base = active ? config.ai_board_interval_active : config.ai_board_interval_quiet;
+
+  // 板ごとの間隔があればそれを使う。無ければ場の設定
+  const base = active
+    ? (board.ai_interval_active ?? config.ai_board_interval_active)
+    : (board.ai_interval_quiet ?? config.ai_board_interval_quiet);
 
   // 全部の板が同じ間隔で目を覚ますと、点検が同じ瞬間に固まる。±25%ずらす
   return Math.round(base * (0.75 + Math.random() * 0.5));
@@ -781,6 +792,50 @@ async function reactSometimes(posts: Post[], state: string): Promise<boolean> {
   }
 
   return !error;
+}
+
+interface BoardRow {
+  title: string;
+  description: string | null;
+  archived: boolean;
+  ai_max_density: number | null;
+  ai_interval_active: number | null;
+  ai_interval_quiet: number | null;
+  ai_probability_scale: number | null;
+}
+
+/**
+ * 板そのものと、その板だけのAIの設定。
+ *
+ * 板ごとの列は migration-009 で入る。未適用のDBでは列が無いので、
+ * その場合は板の基本情報だけ読み直して、設定は空（＝場の設定に従う）とする。
+ */
+async function loadBoard(boardId: string): Promise<BoardRow> {
+  const { data, error } = await supabase
+    .from('boards')
+    .select(
+      'title, description, archived, ai_max_density, ai_interval_active, ai_interval_quiet, ai_probability_scale'
+    )
+    .eq('id', boardId)
+    .single();
+
+  if (!error && data) return data as BoardRow;
+
+  const { data: basic } = await supabase
+    .from('boards')
+    .select('title, description, archived')
+    .eq('id', boardId)
+    .single();
+
+  return {
+    title: (basic?.title as string) ?? '',
+    description: (basic?.description as string) ?? null,
+    archived: Boolean(basic?.archived),
+    ai_max_density: null,
+    ai_interval_active: null,
+    ai_interval_quiet: null,
+    ai_probability_scale: null,
+  };
 }
 
 async function ensureAIUser(aiId: string): Promise<void> {
