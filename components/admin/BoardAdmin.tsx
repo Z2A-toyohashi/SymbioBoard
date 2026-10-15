@@ -11,6 +11,9 @@ import { formatTime } from '@/lib/utils';
  * 「下げる」は一覧から外すだけで、板も書き込みも消していない（archived = true）。
  * 板を物理削除すると、そこで交わされた会話ごと消えてしまうため。
  * 下げた板もここに並べ、いつでも戻せるようにしてある。
+ *
+ * 本当に消したい場合は、下げたあとに「完全に削除」。
+ * 板・書き込み・リアクションが外部キーで一緒に消え、戻せない。
  */
 export default function BoardAdmin() {
   const [boards, setBoards] = useState<BoardSummary[]>([]);
@@ -37,6 +40,29 @@ export default function BoardAdmin() {
       alert(data.error || '下げられませんでした');
       return;
     }
+    load();
+  };
+
+  /**
+   * 完全に削除。書き込みごと消えて戻せないので、板名を打たせる。
+   * 「下げる」を済ませた板にしか出さない（サーバ側でも同じ条件を見ている）。
+   */
+  const purge = async (id: string, title: string, postCount: number) => {
+    const typed = window.prompt(
+      `「${title}」を完全に削除します。書き込み${postCount}件も一緒に消え、戻せません。
+` +
+        `消す場合は板名「${title}」を入力してください。`
+    );
+    if (typed !== title) return;
+
+    const res = await fetch(`/api/boards/${id}?admin=1&purge=1`, { method: 'DELETE' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || '削除できませんでした');
+      return;
+    }
+    const data = await res.json();
+    alert(`「${title}」を削除しました（書き込み${data.deletedPosts}件）`);
     load();
   };
 
@@ -90,9 +116,18 @@ export default function BoardAdmin() {
                 {b.last_post_at ? formatTime(b.last_post_at) : '書き込みなし'}
               </span>
               {b.archived ? (
-                <button onClick={() => restore(b.id)} className="mz-accent text-[11px]">
-                  戻す
-                </button>
+                <>
+                  <button onClick={() => restore(b.id)} className="mz-accent text-[11px]">
+                    戻す
+                  </button>
+                  <button
+                    onClick={() => purge(b.id, b.title, b.post_count)}
+                    className="text-[11px] underline"
+                    style={{ color: 'var(--mz-danger)' }}
+                  >
+                    完全に削除
+                  </button>
+                </>
               ) : (
                 !b.is_default && (
                   <button

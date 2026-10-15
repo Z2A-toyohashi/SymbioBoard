@@ -81,9 +81,15 @@ export function buildResidentPrompt({
 相手が書いたことに直接応じてください。話を一般論に広げず、その一点に返します。`
       : `【いまからすること】
 あなたはいま、この板に新しいスレッドを立てようとしています。
-板の趣旨に沿った話題を、自分から切り出してください。
-誰かに呼びかける形でも、ひとりごとでもかまいません。
-既に出ている話題の繰り返しは避けてください。`
+
+- 話題は、この板の趣旨の中から選びます。趣旨の外には出ません。
+- 上に並んだ直近の書き込みと、既に立っているスレッドは読んでいる前提です。
+  同じ話の繰り返しや、言い方を変えただけの焼き直しは書きません。
+- 直前の流れに乗ってもかまいません（同じ話題の別の角度、続きになる疑問など）。
+  乗らずに切り出す場合も、この板の人が応じられる話にします。
+- 誰かに呼びかける形でも、ひとりごとでもかまいません。
+- 板の趣旨に合う話が思い当たらないときは、無理に広げず、
+  目の前のことを一言書くだけで充分です。`
   );
 
   return blocks.join('\n\n');
@@ -98,7 +104,11 @@ function buildBoardBlock(board: BoardContext, posts: Post[], state: SpaceState):
   const lines = [
     '【いまいる板】',
     `板名: ${board.title}`,
-    board.description ? `趣旨: ${board.description}` : null,
+    board.description ? `この板の趣旨: ${board.description}` : null,
+    board.description
+      ? '※ あなたが書くことは、この趣旨の範囲に収めてください。' +
+        '趣旨から外れた話は、たとえ面白くてもこの板には書きません。'
+      : null,
     `書き込み: ${posts.length}件（スレッド${threads.length}本）`,
     `共存度: ${coexistenceRate(humanCount, aiCount)}%（人${humanCount} / AI${aiCount}）`,
     `場の空気: ${label.name} — ${label.hint}`,
@@ -112,10 +122,34 @@ function buildBoardBlock(board: BoardContext, posts: Post[], state: SpaceState):
     .filter((t) => t.length > 0);
 
   if (recentTopics.length > 0) {
-    lines.push('', '既に出ている話題:');
+    lines.push('', '既に立っているスレッド:');
     for (const topic of recentTopics) {
       lines.push(`- ${topic}`);
     }
+  }
+
+  /**
+   * 直近の会話。
+   *
+   * これまでは「既に出ている話題の頭40字」しか渡していなかった。
+   * 新しくスレッドを立てるときは過去を一切渡していなかったので、
+   * 板の趣旨からも、その日の流れからも外れた独り言が出ていた。
+   *
+   * 板で何が話されているのかが分かって初めて、
+   * 「まだ出ていないが、この板の話」を切り出せる。
+   */
+  const conversation = posts
+    .slice(0, 8)
+    .reverse()
+    .map((p) => {
+      const body = p.content.replace(/\s+/g, ' ').slice(0, 60);
+      const image = p.media_url ? '［画像あり］' : '';
+      return `- ID:${p.author_id.slice(-4)}「${body}」${image}`;
+    });
+
+  if (conversation.length > 0) {
+    lines.push('', '直近の書き込み（古い順）:');
+    lines.push(...conversation);
   }
 
   return lines.join('\n');

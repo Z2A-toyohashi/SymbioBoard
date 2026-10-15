@@ -30,6 +30,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
  * 鍵ではない（この場に本人確認の仕組みは無い）。
  *
  * 管理画面からは admin=1 で、立てた人に関わらず閉じられる。
+ * admin=1 かつ purge=1 のときだけ、板を本当に消す（下げた板に限る）。
  */
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -40,7 +41,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
     const { data: board } = await supabase
       .from('boards')
-      .select('is_default, created_by')
+      .select('is_default, created_by, archived')
       .eq('id', id)
       .single();
 
@@ -50,6 +51,41 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
     if (board.is_default) {
       return NextResponse.json({ error: '既定の板は閉じられません' }, { status: 400 });
+    }
+
+    /**
+     * 完全に削除。
+     *
+     * 板の行を消すと、posts も board_ai_state も外部キーで一緒に消える
+     * （ON DELETE CASCADE）。書き込みに付いたリアクションも同様。戻せない。
+     *
+     * 間違いで消えないよう、二重に絞る。
+     *   - 管理画面からだけ（admin=1）
+     *   - 一度「下げた」板だけ。いま一覧に出ている板はそのままでは消せない
+     *
+     * アップロード済みの画像はStorageに残る。板と結び付いていないので、
+     * ここで消すと他の板に貼られた同じ画像まで巻き込む恐れがある。
+     */
+    if (params.get('purge') === '1') {
+      if (!isAdmin) {
+        return NextResponse.json({ error: '完全な削除は管理画面からだけです' }, { status: 403 });
+      }
+      if (!board.archived) {
+        return NextResponse.json(
+          { error: '先に「下げる」で一覧から外してください' },
+          { status: 400 }
+        );
+      }
+
+      const { count } = await supabase
+        .from('posts')
+        .select('id', { count: 'exact', head: true })
+        .eq('board_id', id);
+
+      const { error: purgeError } = await supabase.from('boards').delete().eq('id', id);
+      if (purgeError) throw purgeError;
+
+      return NextResponse.json({ success: true, purged: true, deletedPosts: count || 0 });
     }
 
     if (!isAdmin) {
