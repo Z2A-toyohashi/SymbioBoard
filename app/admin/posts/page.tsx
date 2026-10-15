@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { Post, SpaceState } from '@/types';
 import { detectSpaceState } from '@/lib/ai-logic';
+import Link from 'next/link';
 import AdminHeader from '@/components/admin/AdminHeader';
 import { getUserColor, formatTime } from '@/lib/utils';
 
@@ -16,6 +17,10 @@ export default function PostsPage() {
   const [filter, setFilter] = useState<'all' | 'user' | 'ai'>('all');
   // どのIDがAIかは管理画面でだけ分かればよい。板には出さない
   const [aiIds, setAiIds] = useState<Set<string>>(new Set());
+  // 投稿がどの板に書かれたかを出すための対応表。閉じた板も含める
+  const [boards, setBoards] = useState<Map<string, { title: string; archived: boolean }>>(
+    new Map()
+  );
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalPosts: 0,
@@ -46,6 +51,18 @@ export default function PostsPage() {
         (charactersData.characters || []).map((c: { id: string }) => c.id)
       );
       setAiIds(ids);
+
+      // 板の名前。閉じた板も引けないと、投稿の行方が追えなくなる
+      const boardsRes = await fetch('/api/boards?includeArchived=1');
+      const boardsData = await boardsRes.json();
+      setBoards(
+        new Map(
+          (boardsData.boards || []).map((b: { id: string; title: string; archived: boolean }) => [
+            b.id,
+            { title: b.title, archived: b.archived },
+          ])
+        )
+      );
 
       const userPosts = allPosts.filter((p) => p.author_type === 'user');
       const aiPosts = allPosts.filter((p) => p.author_type === 'ai');
@@ -177,6 +194,9 @@ export default function PostsPage() {
                       タイプ
                     </th>
                     <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
+                      板
+                    </th>
+                    <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
                       投稿者ID
                     </th>
                     <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-semibold mz-ink-sub">
@@ -232,6 +252,21 @@ export default function PostsPage() {
                             <span className="inline-flex items-center px-2 py-1 text-xs font-medium mz-bg-accent-weak mz-accent">
                               👤 ユーザー
                             </span>
+                          )}
+                        </td>
+                        <td className="px-3 sm:px-4 py-2 sm:py-3">
+                          {post.board_id ? (
+                            <Link
+                              href={`/b/${post.board_id}`}
+                              className="text-xs sm:text-sm mz-ink underline whitespace-nowrap"
+                            >
+                              {boards.get(post.board_id)?.title ?? post.board_id}
+                              {boards.get(post.board_id)?.archived && (
+                                <span className="mz-ink-faint ml-1 text-[10px]">（閉）</span>
+                              )}
+                            </Link>
+                          ) : (
+                            <span className="mz-ink-faint text-xs">板なし</span>
                           )}
                         </td>
                         <td className="px-3 sm:px-4 py-2 sm:py-3">

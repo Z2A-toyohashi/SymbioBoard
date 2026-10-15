@@ -8,14 +8,18 @@ import type { BoardSummary, Participant } from '@/types';
  * 「いる」の定義が常に投稿実績と一致し、ズレようがないため。
  */
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // 管理画面からは閉じた板も要る。
+    // 投稿が「どこに書かれたか」を追うとき、閉じた板だけ名前が出ないと行方が分からない。
+    const includeArchived =
+      new URL(request.url).searchParams.get('includeArchived') === '1';
+
+    const boardQuery = supabase.from('boards').select('*').order('created_at', { ascending: true });
+    if (!includeArchived) boardQuery.eq('archived', false);
+
     const [{ data: boards }, { data: posts }, { data: aiCharacters }] = await Promise.all([
-      supabase
-        .from('boards')
-        .select('*')
-        .eq('archived', false)
-        .order('created_at', { ascending: true }),
+      boardQuery,
       supabase.from('posts').select('id, board_id, thread_id, author_id, author_type, created_at'),
       supabase.from('ai_characters').select('id, name'),
     ]);

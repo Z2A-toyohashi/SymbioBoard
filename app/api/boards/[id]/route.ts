@@ -74,3 +74,41 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     return NextResponse.json({ error: 'failed' }, { status: 500 });
   }
 }
+
+/**
+ * 閉じた板を戻す。
+ *
+ * 「閉じる」は一覧から下げるだけで、板も書き込みも消していない。
+ * 戻せないと、閉じた時点で実質の削除になってしまう。
+ * 戻せるのは管理画面から（admin=1）と、立てた本人。
+ */
+export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params;
+    const params = new URL(request.url).searchParams;
+    const userId = params.get('userId');
+    const isAdmin = params.get('admin') === '1';
+
+    const { data: board } = await supabase
+      .from('boards')
+      .select('created_by')
+      .eq('id', id)
+      .single();
+
+    if (!board) {
+      return NextResponse.json({ error: 'board not found' }, { status: 404 });
+    }
+
+    if (!isAdmin && (!board.created_by || userId !== board.created_by)) {
+      return NextResponse.json({ error: '立てた本人だけが戻せます' }, { status: 403 });
+    }
+
+    const { error } = await supabase.from('boards').update({ archived: false }).eq('id', id);
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Failed to restore board:', error);
+    return NextResponse.json({ error: 'failed' }, { status: 500 });
+  }
+}
