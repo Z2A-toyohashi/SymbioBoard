@@ -1,5 +1,5 @@
 /**
- * AIの書き込みに混ざるURLの扱い。
+ * AIが書いたURLの検査。
  *
  * 住人が書いたURLを、そのまま板に載せてはいけない。
  *
@@ -11,48 +11,16 @@
  * そこでこの場では、次の2つを通ったURLだけを板に出す。
  *
  *   1. 検索の引用（モデルが打った文字ではなく、APIが返した引用先）であること
- *   2. いま実際に開けること（HEADで200番台〜300番台が返ること）
+ *   2. いま実際に開けること
  *
  * 通らなかったURLは本文から外す。URLが消えても文章は読めるので、
  * 「開けない住所が貼ってある」より害が小さい。
- */
-
-/** 本文からURLを拾う。画面側の切り出し（components/RichText.tsx）と同じ境目で止める */
-const URL_PATTERN =
-  /https?:\/\/[^\s<>"'`、。，．・…：；！？「」『』（）〔〕【】〈〉《》｡｢｣､()[\]{}|\\^]+/g;
-
-const TRAILING_PUNCTUATION = /[!?.,:;]+$/;
-
-export function extractUrls(text: string): string[] {
-  const found: string[] = [];
-  for (const match of text.matchAll(URL_PATTERN)) {
-    const trailing = match[0].match(TRAILING_PUNCTUATION)?.[0] ?? '';
-    const url = trailing ? match[0].slice(0, -trailing.length) : match[0];
-    if (url) found.push(url);
-  }
-  return found;
-}
-
-/**
- * 本文からURLを外す。
  *
- * 外した跡の空白をそのままにすると「昨日のあれ、 で見た」のように、
- * 日本語の途中に穴が空いたまま残る。跡も一緒に畳む。
+ * 拾う・外すの規則そのものは lib/url-text.ts にある（画面側と共通）。
  */
-export function stripUrls(text: string): string {
-  return (
-    text
-      .replace(URL_PATTERN, '')
-      // 日本語の字に挟まれた空白は、URLを抜いた跡なので詰める
-      .replace(/(?<=[^\x00-\x7F])[ \t]+(?=[^\x00-\x7F])/g, '')
-      .replace(/[ \t]{2,}/g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .split('\n')
-      .map((line) => line.trim())
-      .join('\n')
-      .trim()
-  );
-}
+import { sameTarget } from './url-text';
+
+export { extractUrls, stripUrls } from './url-text';
 
 /** 開けるかどうかを確かめる。確かめられなければ使わない（安全側に倒す） */
 export async function isReachable(url: string, timeoutMs = 4000): Promise<boolean> {
@@ -157,24 +125,4 @@ export async function pickSafeUrl(
   }
 
   return null;
-}
-
-/** 同じページを指しているか。末尾の / と追跡用の問い合わせは無視する */
-function sameTarget(a: string, b: string): boolean {
-  const normalize = (value: string) => {
-    try {
-      const url = new URL(value);
-      url.hash = '';
-      for (const key of [...url.searchParams.keys()]) {
-        if (key.startsWith('utm_') || key === 'ref' || key === 'fbclid') {
-          url.searchParams.delete(key);
-        }
-      }
-      return `${url.host}${url.pathname.replace(/\/$/, '')}${url.search}`;
-    } catch {
-      return value;
-    }
-  };
-
-  return normalize(a) === normalize(b);
 }

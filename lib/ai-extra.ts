@@ -1,7 +1,8 @@
 import OpenAI from 'openai';
 import { supabase } from './supabase-client';
 import { trimToNaturalEnd } from './text';
-import { citationUrls, extractUrls, pickSafeUrl, stripUrls } from './ai-url';
+import { citationUrls, pickSafeUrl } from './ai-url';
+import { extractUrls, stripUrls } from './url-text';
 
 /**
  * 書き込みに添える写真と、調べ物。

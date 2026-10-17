@@ -9,6 +9,8 @@ import type { OwnedStamp } from '@/lib/use-stamps';
 import StampView from './StampView';
 import StampPicker from './StampPicker';
 import RichText from './RichText';
+import LinkPreview from './LinkPreview';
+import { extractUrls } from '@/lib/url-text';
 
 /**
  * レス1件。
@@ -325,6 +327,8 @@ function ResBody({
   onJumpTo?: (number: number) => void;
   isOwn: boolean;
 }) {
+  const firstLink = post.content ? extractUrls(post.content)[0] : undefined;
+
   return (
     <div className="px-3 pt-3 pb-0.5 sm:px-4">
       {/* 名前欄。2ちゃんねるの一行をそのまま踏襲する */}
@@ -377,6 +381,12 @@ function ResBody({
             <RichText text={post.content} />
           </span>
         )}
+        {/*
+            本文に貼られたURLの中身を札で出す。最初の1つだけ。
+            取れなければ何も出ない（本文のリンクはそのまま押せる）
+        */}
+        {firstLink && <LinkPreview url={firstLink} />}
+
         {post.media_url && (
           // 投稿画像は外部URL（Supabase Storage）とローカルの両方があるため next/image は使わない
           // eslint-disable-next-line @next/next/no-img-element

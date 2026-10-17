@@ -14,23 +14,7 @@
  * そもそも URL として拾わない（下の正規表現が先頭で弾く）。
  */
 
-/**
- * 本文から拾うURL。
- *
- * 日本語の文中に裸で書かれるので、どこで切るかが要になる。
- * 止めるのは、空白と、URLには普通そのまま入らない記号（句読点・鉤括弧など）。
- *
- * 日本語そのものは止める文字に入れていない。
- * https://ja.wikipedia.org/wiki/日本語 のように、日本語を含むURLは実在する。
- */
-const URL_PATTERN =
-  /https?:\/\/[^\s<>"'`、。，．・…：；！？「」『』（）〔〕【】〈〉《》｡｢｣､()[\]{}|\^]+/g;
-
-/**
- * 末尾の記号はURLに含めない。
- * 「詳しくは https://example.com/abc.」の「.」まで拾うと、開けないリンクになる。
- */
-const TRAILING_PUNCTUATION = /[!?.,:;]+$/;
+import { URL_PATTERN, tidyUrl } from '@/lib/url-text';
 
 export default function RichText({ text }: { text: string }) {
   const parts: React.ReactNode[] = [];
@@ -39,11 +23,8 @@ export default function RichText({ text }: { text: string }) {
 
   for (const match of text.matchAll(URL_PATTERN)) {
     const start = match.index ?? 0;
-    let url = match[0];
-
     // 末尾の句読点は本文側に戻す
-    const trailing = url.match(TRAILING_PUNCTUATION)?.[0] ?? '';
-    if (trailing) url = url.slice(0, -trailing.length);
+    const url = tidyUrl(match[0]);
     if (!url) continue;
 
     if (start > cursor) parts.push(text.slice(cursor, start));

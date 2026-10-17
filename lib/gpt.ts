@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import type { Post } from '@/types';
 import { dropDanglingSentence, trimToNaturalEnd } from './text';
-import { stripUrls } from './ai-url';
+import { stripUrls } from './url-text';
 import { isReasoningModel } from './ai-cost';
 
 const openai = new OpenAI({
