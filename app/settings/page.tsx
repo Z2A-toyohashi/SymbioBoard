@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getUserId, setUserId as persistUserId } from '@/lib/user';
+import { ensureUserId, setUserId as persistUserId } from '@/lib/user';
+import { displayId } from '@/lib/short-id';
 import SiteHeader from '@/components/SiteHeader';
 
 /**
@@ -26,10 +27,10 @@ export default function SettingsPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const id = getUserId();
-    setUserId(id);
-
     const load = async () => {
+      const id = await ensureUserId();
+      setUserId(id);
+
       await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -83,84 +84,87 @@ export default function SettingsPage() {
     <div className="min-h-screen">
       <SiteHeader userId={userId} boardTitle="設定・引き継ぎ" backHref="/" />
 
-      <main className="max-w-2xl mx-auto px-3 sm:px-4 py-4 pb-24 space-y-4">
-        <section className="border mz-border-strong mz-surface p-4">
-          <h2 className="font-bold mz-ink text-[15px] mb-1">このブラウザのあなた</h2>
-          <p className="text-[12px] mz-ink-sub mb-3">
-            この場に名前はありません。書き込みの横に出る ID
-            だけが、同じ人かどうかの手がかりになります。
+      <main className="mx-auto max-w-2xl space-y-4 px-4 py-5 pb-24 sm:px-6">
+        <section className="mz-card p-4">
+          <h2 className="mz-ink mb-1 text-[15px] font-bold">このブラウザのあなた</h2>
+          <p className="mz-ink-sub mb-3 text-[12px] leading-relaxed">
+            この場に名前はありません。書き込みの横に出る4桁のIDだけが、
+            同じ人かどうかの手がかりになります。
           </p>
-          <div className="mz-mono text-lg mz-ink px-3 py-2 mz-surface-sub border mz-border inline-block">
-            ID:{userId.slice(-4)}
+          <div className="mz-mono mz-ink mz-surface-sub mz-border inline-block rounded-[var(--mz-radius-sm)] border px-3.5 py-2 text-lg">
+            ID:{displayId(userId)}
           </div>
         </section>
 
-        <section className="border mz-border-strong mz-surface p-4">
-          <h2 className="font-bold mz-ink text-[15px] mb-1">引き継ぎコード</h2>
-          <p className="text-[12px] mz-ink-sub mb-3">
+        <section className="mz-card p-4">
+          <h2 className="mz-ink mb-1 text-[15px] font-bold">引き継ぎコード</h2>
+          <p className="mz-ink-sub mb-3 text-[12px] leading-relaxed">
             パソコンとスマホで同じあなたとして書き込むためのコードです。
             別のブラウザでこのコードを入力すると、そちらもこのIDになります。
             <strong className="mz-ink">他の人には見せないでください。</strong>
           </p>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2">
             <code
-              className="mz-mono text-[15px] px-3 py-2 border mz-border mz-surface-sub tracking-widest"
+              className="mz-mono mz-border mz-surface-sub rounded-[var(--mz-radius-sm)] border px-3.5 py-2.5 text-[15px] tracking-widest"
               style={{ filter: codeVisible ? 'none' : 'blur(5px)' }}
             >
               {code || '発行中…'}
             </code>
             <button
               onClick={() => setCodeVisible((v) => !v)}
-              className="px-3 py-2 border mz-border-strong text-[12px] mz-ink-sub"
+              className="mz-btn mz-btn-sm mz-btn-quiet"
             >
               {codeVisible ? '隠す' : '表示する'}
             </button>
             <button
               onClick={copyCode}
               disabled={!code}
-              className="px-3 py-2 text-[12px] font-bold disabled:opacity-40"
-              style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
+              className="mz-btn mz-btn-sm mz-btn-primary"
             >
               {copied ? 'コピーしました' : 'コピー'}
             </button>
           </div>
         </section>
 
-        <section className="border mz-border-strong mz-surface p-4">
-          <h2 className="font-bold mz-ink text-[15px] mb-1">別のブラウザから引き継ぐ</h2>
-          <p className="text-[12px] mz-ink-sub mb-3">
+        <section className="mz-card p-4">
+          <h2 className="mz-ink mb-1 text-[15px] font-bold">別のブラウザから引き継ぐ</h2>
+          <p className="mz-ink-sub mb-3 text-[12px] leading-relaxed">
             元のブラウザで表示したコードを、ここに入力してください。
             いまこのブラウザで書いた内容は、引き継ぎ後は別人の書き込みとして残ります。
           </p>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value.toUpperCase())}
               placeholder="XXXX-XXXX-XXXX"
-              className="mz-mono px-3 py-2 border mz-border-strong tracking-widest focus:outline-none"
+              aria-label="引き継ぎコード"
+              className="mz-field mz-mono w-[15.5em] tracking-widest"
               maxLength={14}
             />
             <button
               onClick={handover}
               disabled={input.trim().length < 12}
-              className="px-4 py-2 font-bold text-[13px] disabled:opacity-40"
-              style={{ background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }}
+              className="mz-btn mz-btn-primary"
             >
               引き継ぐ
             </button>
           </div>
 
           {error && (
-            <p className="mt-2 text-[12px]" style={{ color: 'var(--mz-danger)' }}>
+            <p className="mt-2.5 text-[12px]" role="status" style={{ color: 'var(--mz-danger)' }}>
               {error}
             </p>
           )}
-          {message && <p className="mt-2 text-[12px] mz-accent">{message}</p>}
+          {message && (
+            <p className="mz-accent mt-2.5 text-[12px]" role="status">
+              {message}
+            </p>
+          )}
         </section>
 
-        <p className="text-[11px] mz-ink-faint leading-relaxed px-1">
+        <p className="mz-ink-faint px-1 text-[11px] leading-relaxed">
           IDはこのブラウザの Cookie と localStorage の両方に保存しています。
           片方が消えても、もう片方が残っていれば同じあなたのままです。
           両方消えた場合は、このコードで元に戻せます。

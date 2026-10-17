@@ -9,16 +9,18 @@ import type { BoardSummary } from '@/types';
  *
  * 広い画面で本文が中央に一本だけ立っていると、掲示板というより記事に見える。
  * 板を渡り歩けることが掲示板の中身なので、その導線を横に常駐させる。
- * 狭い画面では出さない。題字の「← 板一覧」で足りる。
+ * 狭い画面では出さない。代わりに板名の横列（BoardTabs）を本文の上に置く。
  */
 export default function BoardRail({ currentBoardId }: { currentBoardId?: string }) {
   const [boards, setBoards] = useState<BoardSummary[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch('/api/boards')
       .then((r) => r.json())
       .then((d) => setBoards(d.boards || []))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -32,30 +34,41 @@ export default function BoardRail({ currentBoardId }: { currentBoardId?: string 
         </div>
 
         <nav className="space-y-0.5">
-          {boards.map((board) => {
-            const active = board.id === currentBoardId;
-            return (
-              <Link
-                key={board.id}
-                href={`/b/${board.id}`}
-                className="flex items-baseline gap-2 rounded-[7px] px-2.5 py-2.5 transition-colors"
-                style={
-                  active
-                    ? { background: 'var(--mz-accent-weak)', color: 'var(--mz-accent)' }
-                    : { color: 'var(--mz-ink)' }
-                }
-              >
-                <span className={`truncate text-[13px] ${active ? 'font-bold' : ''}`}>
-                  {board.title}
-                </span>
-                <span className="mz-mono mz-ink-faint ml-auto shrink-0 text-[11px] tabular-nums">
-                  {board.post_count}
-                </span>
-              </Link>
-            );
-          })}
-          {boards.length === 0 && (
-            <p className="mz-ink-faint px-2.5 py-3 text-[12px]">読み込み中…</p>
+          {loading &&
+            // 来るものと同じ高さの影を先に置く。描き終わりに列が跳ねないようにする
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="px-2.5 py-2.5">
+                <div className="mz-skeleton h-[13px]" style={{ width: `${70 - i * 8}%` }} />
+              </div>
+            ))}
+
+          {!loading &&
+            boards.map((board) => {
+              const active = board.id === currentBoardId;
+              return (
+                <Link
+                  key={board.id}
+                  href={`/b/${board.id}`}
+                  aria-current={active ? 'page' : undefined}
+                  className="flex items-baseline gap-2 rounded-[var(--mz-radius-sm)] px-2.5 py-2.5 transition-colors"
+                  style={
+                    active
+                      ? { background: 'var(--mz-accent-weak)', color: 'var(--mz-accent)' }
+                      : { color: 'var(--mz-ink)' }
+                  }
+                >
+                  <span className={`truncate text-[13px] ${active ? 'font-bold' : ''}`}>
+                    {board.title}
+                  </span>
+                  <span className="mz-mono mz-ink-faint ml-auto shrink-0 text-[11px] tabular-nums">
+                    {board.post_count}
+                  </span>
+                </Link>
+              );
+            })}
+
+          {!loading && boards.length === 0 && (
+            <p className="mz-ink-faint px-2.5 py-3 text-[12px]">まだ板がありません</p>
           )}
         </nav>
 

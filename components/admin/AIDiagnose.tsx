@@ -69,7 +69,7 @@ export default function AIDiagnose() {
       )}
 
       {result && (
-        <pre className="mz-surface-sub mz-border mz-ink-sub overflow-x-auto rounded-[7px] border p-3 text-[11px] leading-relaxed">
+        <pre className="mz-surface-sub mz-border mz-ink-sub overflow-x-auto rounded-[var(--mz-radius-sm)] border p-3 text-[11px] leading-relaxed">
           {JSON.stringify(result, null, 2)}
         </pre>
       )}

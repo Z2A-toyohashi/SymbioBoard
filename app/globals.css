@@ -11,6 +11,15 @@
   ・文字は大きいほど字間を詰め、行間をきつくする（サイズ別の調整）
   ・動きは120〜200ms。reduced-motion では動かさず不透明度だけ変える
   ・色は碓井緑ひとつ。書き手が人かAIかで色を変えない（それがこの場の中身）
+
+  仕上げの質感は setlog（1時間に1回だけ撮れるVlogのSNS）に寄せている。
+  ああいうアプリが身構えずに触られるのは、面がはっきり角丸で、押せるものが
+  丸く、余白が詰まっていないからで、色数の多さではない。
+  なので色はそのままにして、角丸・影・余白・見出しの太さだけを寄せた。
+  ・角丸は大きく（面18px / 小面12px / 押せるものは丸ごと）
+  ・面は線で囲うだけでなく、薄い影でわずかに浮かせる
+  ・見出しは明朝ではなく太いゴシック。数字は等幅で桁を揃える
+  ・余白は気持ち広め。詰めると「業務画面」の顔になる
 */
 
 :root {
@@ -43,10 +52,23 @@
   --mz-chrome: rgba(255, 255, 255, 0.78);
   --mz-elev: 0 1px 2px rgba(26, 30, 22, 0.05), 0 8px 24px rgba(26, 30, 22, 0.06);
 
-  --mz-radius: 10px;
-  --mz-radius-sm: 7px;
+  /* 面の角丸。ここを 10px / 7px に戻せば元の硬い掲示板の顔に戻る */
+  --mz-radius: 18px;
+  --mz-radius-sm: 12px;
+  --mz-radius-pill: 999px;
 
-  --font-display: var(--font-display-jp), 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+  /* 面をわずかに浮かせる影。輪郭の線と併用する */
+  --mz-elev-card: 0 1px 2px rgba(26, 30, 22, 0.04), 0 2px 10px rgba(26, 30, 22, 0.04);
+
+  /* 名前の脇に出すAIの印。本文の色は人とAIで変えない */
+  --mz-ai: var(--mz-green-500);
+  --mz-ai-weak: var(--mz-green-100);
+
+  /* 見出しは太いゴシック。明朝に戻すなら --font-display を
+     var(--font-display-jp)（Shippori Mincho）に差し替えるだけでよい */
+  --font-display:
+    var(--font-body-jp), -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+  --font-serif: var(--font-display-jp), 'Hiragino Mincho ProN', 'Yu Mincho', serif;
   --font-body:
     var(--font-body-jp), -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
 }
@@ -76,6 +98,7 @@
 
     --mz-chrome: rgba(25, 29, 20, 0.76);
     --mz-elev: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --mz-elev-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 10px rgba(0, 0, 0, 0.22);
   }
 }
 
@@ -104,12 +127,14 @@ body {
 /* 大きい文字ほど字間を詰め、行間をきつくする */
 h1 {
   font-family: var(--font-display);
+  font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.02em;
 }
 h2,
 h3 {
   font-family: var(--font-display);
+  font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.01em;
 }
@@ -117,6 +142,10 @@ h3 {
 @layer utilities {
   .mz-display {
     font-family: var(--font-display);
+  }
+  /* 明朝で出したい箇所だけに付ける */
+  .mz-serif {
+    font-family: var(--font-serif);
   }
   .mz-surface {
     background: var(--mz-surface);
@@ -156,11 +185,24 @@ h3 {
   .mz-mono {
     font-family: 'SF Mono', 'Menlo', 'Consolas', ui-monospace, monospace;
     font-feature-settings: 'tnum' 1;
+    font-variant-numeric: tabular-nums;
     letter-spacing: 0;
   }
 
   .mz-safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* 横に流れる列。板の横列で使う。棒は出さない（指で払うもの） */
+  .mz-scroll-x {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    overscroll-behavior-x: contain;
+    scroll-behavior: smooth;
+  }
+  .mz-scroll-x::-webkit-scrollbar {
+    display: none;
   }
 
   .animate-fade-in {
@@ -185,6 +227,13 @@ h3 {
     background: var(--mz-surface);
     border: 1px solid var(--mz-line);
     border-radius: var(--mz-radius);
+    box-shadow: var(--mz-elev-card);
+  }
+  /* 画面の端まで伸ばす面（スマホ）では、影が線のように見えるので消す */
+  @media (max-width: 639px) {
+    .mz-card.rounded-none {
+      box-shadow: none;
+    }
   }
 
   /* 上や下に浮いている帯。下の内容が透ける */
@@ -198,7 +247,7 @@ h3 {
   .mz-row {
     border: 1px solid var(--mz-line);
     border-radius: var(--mz-radius-sm);
-    padding: 0.75rem;
+    padding: 0.9rem 1rem;
     background: var(--mz-surface);
   }
 
@@ -210,8 +259,8 @@ h3 {
     justify-content: center;
     gap: 0.4em;
     min-height: 44px;
-    padding: 0 1.15rem;
-    border-radius: var(--mz-radius-sm);
+    padding: 0 1.3rem;
+    border-radius: var(--mz-radius-pill);
     border: 1px solid transparent;
     font-size: 15px;
     font-weight: 700;
@@ -253,7 +302,7 @@ h3 {
   /* 小さめだが指で押せる最小寸法は守る */
   .mz-btn-sm {
     min-height: 36px;
-    padding: 0 0.85rem;
+    padding: 0 0.95rem;
     font-size: 13px;
   }
 
@@ -264,7 +313,7 @@ h3 {
     width: 44px;
     height: 44px;
     border: 1px solid var(--mz-line-strong);
-    border-radius: var(--mz-radius-sm);
+    border-radius: var(--mz-radius-pill);
     background: var(--mz-surface);
     color: var(--mz-ink);
     font-size: 19px;
@@ -282,7 +331,7 @@ h3 {
   .mz-field {
     width: 100%;
     min-height: 44px;
-    padding: 0.6rem 0.8rem;
+    padding: 0.7rem 0.95rem;
     border: 1px solid var(--mz-line-strong);
     border-radius: var(--mz-radius-sm);
     background: var(--mz-surface);
@@ -297,12 +346,119 @@ h3 {
     border-color: var(--mz-accent);
     box-shadow: 0 0 0 3px var(--mz-accent-weak);
   }
+
+  /* 小さな札 ------------------------------------------------- */
+  /* 「既定」「返信先」「自分」など、1語だけ添えるもの。
+     枠の四角を並べると画面が賑やかになるので丸くする */
+  .mz-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.1rem 0.5rem;
+    border-radius: var(--mz-radius-pill);
+    background: var(--mz-surface-sub);
+    border: 1px solid var(--mz-line);
+    color: var(--mz-ink-sub);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+  .mz-chip-accent {
+    background: var(--mz-accent-weak);
+    border-color: transparent;
+    color: var(--mz-accent);
+    font-weight: 700;
+  }
+
+  /* 文字だけの操作 ------------------------------------------- */
+  /*
+    レスの下に並ぶ「返信」「スタンプ」「削除」。
+    見た目は文字のままにしたいが、文字そのものの高さは指には小さすぎる。
+    上下に余白を伸ばして、押せる範囲だけを44pxまで広げる。
+  */
+  .mz-tap {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 0.15rem;
+    cursor: pointer;
+    background: none;
+    border: 0;
+    font: inherit;
+    color: inherit;
+    touch-action: manipulation;
+    transition: opacity 120ms ease-out;
+  }
+  .mz-tap:active {
+    opacity: 0.5;
+  }
+
+  /* 記号ひとつのボタン。丸。44px */
+  .mz-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+    border-radius: var(--mz-radius-pill);
+    border: 1px solid var(--mz-line-strong);
+    background: var(--mz-surface);
+    color: var(--mz-ink);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 100ms ease-out, background-color 120ms ease-out;
+    touch-action: manipulation;
+  }
+  .mz-btn-icon:active {
+    transform: scale(0.94);
+    background: var(--mz-accent-weak);
+  }
+
+  /* 読み込み中の場所取り --------------------------------------- */
+  /*
+    「読み込み中…」の一行だと、出てくるものの大きさが分からないので、
+    描き終わった瞬間に画面が跳ねる。来るものと同じ形の影を先に置く。
+  */
+  .mz-skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--mz-surface-sub) 0%,
+      var(--mz-line) 50%,
+      var(--mz-surface-sub) 100%
+    );
+    background-size: 200% 100%;
+    border-radius: var(--mz-radius-sm);
+    animation: mzShimmer 1.4s ease-in-out infinite;
+  }
+
+  @keyframes mzShimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
 }
 
 input,
 textarea,
 select {
   font-family: inherit;
+}
+
+/*
+  キーボードで操作している人向けの輪郭。
+  これまで輪郭が出ていたのは入力欄だけで、レスの「返信」「スタンプ」や
+  板のリンクに移っても、いまどこに居るのかが画面から分からなかった。
+  マウスで押したときには出さない（:focus ではなく :focus-visible）。
+*/
+:where(a, button, [role='button'], input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--mz-accent);
+  outline-offset: 2px;
+  border-radius: var(--mz-radius-sm);
 }
 
 input::placeholder,
@@ -345,8 +501,13 @@ input[type='checkbox'] {
     transition-duration: 0.01ms !important;
   }
   .mz-btn:active,
-  .mz-stepper:active {
+  .mz-stepper:active,
+  .mz-btn-icon:active {
     transform: none;
+  }
+  /* 光が止まったまま途中で固まるので、動かさないときは単色にする */
+  .mz-skeleton {
+    background: var(--mz-surface-sub);
   }
 }
 

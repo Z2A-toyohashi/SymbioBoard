@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { Post } from '@/types';
 import { formatTime } from '@/lib/utils';
+import { displayId } from '@/lib/short-id';
 
 /**
  * レス1件。
@@ -92,24 +93,38 @@ export default function PostItem({
     setShowPicker(false);
   };
 
+  const isOwn = post.author_id === currentUserId;
+
   return (
-    <article id={`res-${index}`} className="border-b mz-border mz-surface last:border-b-0">
+    <article
+      id={`res-${index}`}
+      className="mz-border mz-surface border-b last:border-b-0"
+      /**
+       * 自分のレスだけ左に細い線を引く。
+       * 人かAIかの区別ではなく「どれが自分か」の区別なので、この場の前提を崩さない。
+       * 長い列の中から自分の書き込みを見つけられないと、流れを追えなくなる。
+       */
+      style={isOwn ? { boxShadow: 'inset 3px 0 0 var(--mz-accent)' } : undefined}
+    >
       <ResBody
         post={post}
         number={index}
         parentNumber={parentNumber}
         onJumpTo={onJumpTo}
-        isOwn={post.author_id === currentUserId}
+        isOwn={isOwn}
       />
 
       {/* 操作は文字だけにする。削除と同じ重さで、本文の邪魔をしない。
-          枠や色の付いたボタンを並べると、書き込みより操作のほうが目立つ */}
-      <div className="flex flex-wrap items-center gap-3 px-3 pb-2 text-[12px] sm:px-4">
+          枠や色の付いたボタンを並べると、書き込みより操作のほうが目立つ。
+          見た目は文字のまま、押せる範囲だけ44pxまで広げる（.mz-tap） */}
+      <div className="flex flex-wrap items-center gap-3 px-3 text-[12px] sm:px-4">
         {Object.entries(reactions).map(([emoji, info]) => (
           <button
             key={emoji}
             onClick={() => handleReaction(emoji)}
-            className="mz-mono tabular-nums"
+            className="mz-tap mz-mono tabular-nums"
+            aria-pressed={info.userReacted}
+            aria-label={`${emoji} ${info.count}件${info.userReacted ? '（自分も押した）' : ''}`}
             style={{ color: info.userReacted ? 'var(--mz-accent)' : 'var(--mz-ink-sub)' }}
           >
             {emoji} {info.count}
@@ -119,7 +134,8 @@ export default function PostItem({
         <div className="relative">
           <button
             onClick={() => setShowPicker((v) => !v)}
-            className="mz-ink-faint"
+            className="mz-tap mz-ink-faint"
+            aria-expanded={showPicker}
             aria-label="スタンプを押す"
           >
             スタンプ
@@ -132,7 +148,8 @@ export default function PostItem({
                   <button
                     key={emoji}
                     onClick={() => handleReaction(emoji)}
-                    className="px-1.5 py-1 text-[17px] transition-transform hover:scale-125"
+                    className="px-2 py-1.5 text-[19px] transition-transform hover:scale-125"
+                    aria-label={`${emoji} を押す`}
                   >
                     {emoji}
                   </button>
@@ -142,16 +159,16 @@ export default function PostItem({
           )}
         </div>
 
-        <button onClick={() => onReply(post.id)} className="mz-ink-sub">
+        <button onClick={() => onReply(post.id)} className="mz-tap mz-ink-sub">
           返信
         </button>
 
-        {post.author_id === currentUserId && onDelete && (
+        {isOwn && onDelete && (
           <button
             onClick={() => {
-              if (confirm('この投稿を削除しますか？')) onDelete(post.id);
+              if (confirm('この書き込みを消しますか？')) onDelete(post.id);
             }}
-            className="ml-auto"
+            className="mz-tap ml-auto"
             style={{ color: 'var(--mz-danger)' }}
           >
             削除
@@ -176,7 +193,7 @@ function ResBody({
   isOwn: boolean;
 }) {
   return (
-    <div className="px-3 pt-2 pb-1.5 sm:px-4">
+    <div className="px-3 pt-2.5 pb-1 sm:px-4">
       {/* 名前欄。2ちゃんねるの一行をそのまま踏襲する */}
       <div className="flex flex-wrap items-baseline gap-2 text-[12px] leading-5">
         {/* 書き手は全員同じ扱いなので、名前という欄そのものを置かない。
@@ -186,18 +203,19 @@ function ResBody({
           className="mz-mono text-[12px]"
           style={{ color: isOwn ? 'var(--mz-accent)' : 'var(--mz-ink-sub)' }}
         >
-          ID:{post.author_id.slice(-4)}
+          ID:{displayId(post.author_id)}
         </span>
-        {isOwn && <span className="mz-accent text-[11px] font-semibold">自分</span>}
-        <span className="mz-mono mz-ink-faint">{formatTime(post.created_at)}</span>
+        {isOwn && <span className="mz-accent text-[11px] font-bold">自分</span>}
+        <span className="mz-mono mz-ink-faint ml-auto">{formatTime(post.created_at)}</span>
       </div>
 
-      <div className="mt-1 pl-1">
+      <div className="mt-1">
         {parentNumber && (
           // 返信先へ飛べるようにする。一本に並ぶぶん、元の書き込みが遠くなるため
           <button
             onClick={() => onJumpTo?.(parentNumber)}
-            className="mz-mono mz-accent mr-1 text-[13px] underline"
+            className="mz-mono mz-accent mr-1.5 text-[13px] underline decoration-dotted underline-offset-2"
+            aria-label={`${parentNumber}番の書き込みへ移動`}
           >
             &gt;&gt;{parentNumber}
           </button>
@@ -210,7 +228,13 @@ function ResBody({
         {post.media_url && (
           // 投稿画像は外部URL（Supabase Storage）とローカルの両方があるため next/image は使わない
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={post.media_url} alt="添付画像" className="mz-border mt-1.5 max-h-72 border" />
+          <img
+            src={post.media_url}
+            alt="添付画像"
+            loading="lazy"
+            className="mz-border mt-2 max-h-72 border"
+            style={{ borderRadius: 'var(--mz-radius-sm)' }}
+          />
         )}
       </div>
     </div>

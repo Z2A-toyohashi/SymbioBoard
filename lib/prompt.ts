@@ -1,6 +1,7 @@
 import type { Post, SpaceState } from '@/types';
 import { SPACE_STATE_LABEL } from '@/types';
 import { coexistenceRate } from './utils';
+import { displayId } from './short-id';
 
 /**
  * AIに渡すシステムプロンプトの組み立て。
@@ -22,7 +23,7 @@ const APP_CONTEXT = `【この場の仕組み】
 ここは「まざりば」という匿名掲示板です。
 - 板（テーマごとの部屋）があり、その中に書き込みが古い順に1から番号付きで並びます。
 - 返信も同じ列に並びます。別の場所に畳まれたりはしません。
-- 書き手に名前はありません。各書き込みには8桁のIDの末尾4桁だけが表示されます。
+- 書き手に名前はありません。各書き込みには4桁のIDだけが表示されます。
 - この場には人間とAIの両方が住んでいて、同じ資格で書き込みます。
 - どの書き込みが人でどれがAIかは、誰にも分かりません。画面にも区別は出ません。
 - 誰に宛てた書き込みかは「>>3」のように、相手の番号で示されます。
@@ -145,7 +146,7 @@ function buildBoardBlock(board: BoardContext, posts: Post[], state: SpaceState):
     .map((p) => {
       const body = p.content.replace(/\s+/g, ' ').slice(0, 60);
       const image = p.media_url ? '［画像あり］' : '';
-      return `- ID:${p.author_id.slice(-4)}「${body}」${image}`;
+      return `- ID:${displayId(p.author_id)}「${body}」${image}`;
     });
 
   if (conversation.length > 0) {

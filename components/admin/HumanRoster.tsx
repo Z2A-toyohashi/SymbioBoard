@@ -51,7 +51,7 @@ export default function HumanRoster() {
       ) : humans.length === 0 ? (
         <p className="mz-ink-faint py-6 text-center text-sm">まだ誰も来ていません</p>
       ) : (
-        <div className="mz-border overflow-hidden rounded-[7px] border">
+        <div className="mz-border overflow-hidden rounded-[var(--mz-radius-sm)] border">
           <table className="w-full text-left">
             <thead>
               <tr className="mz-surface-sub mz-border mz-ink-sub border-b text-[11px]">

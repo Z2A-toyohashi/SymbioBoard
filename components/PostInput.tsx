@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import type { Post } from '@/types';
+import { displayId } from '@/lib/short-id';
 
 /**
  * 投稿欄は画面下に固定する。
@@ -17,6 +18,11 @@ interface PostInputProps {
   onCancel?: () => void;
 }
 
+/** 書ける長さの上限。これを超えると掲示板の1レスとしては長すぎる */
+const MAX_LENGTH = 1000;
+/** 残り字数を出しはじめる位置 */
+const COUNT_FROM = 800;
+
 export default function PostInput({
   onPost,
   placeholder = 'いま思ったことを書く',
@@ -29,6 +35,14 @@ export default function PostInput({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  /**
+   * 失敗の知らせ。
+   *
+   * 以前は alert() で出していた。アップロードに失敗すると画面全体が止まり、
+   * 押して消すまで何も読めない。書こうとしていた文章も見えなくなる。
+   * 失敗したのは投稿欄の中の出来事なので、投稿欄の中に出す。
+   */
+  const [notice, setNotice] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +80,7 @@ export default function PostInput({
 
   const handleSubmit = async () => {
     if (!content.trim() && !imageFile) return;
+    setNotice('');
 
     let mediaUrl: string | undefined;
     let type: 'text' | 'voice' | 'image' = 'text';
@@ -90,8 +105,8 @@ export default function PostInput({
         type = 'image';
       } catch (error) {
         console.error('Upload failed:', error);
-        alert(
-          `画像のアップロードに失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`
+        setNotice(
+          `画像を送れませんでした（${error instanceof Error ? error.message : '原因不明'}）。文章だけなら、画像を外すと送れます`
         );
         setIsUploading(false);
         return;
@@ -110,15 +125,19 @@ export default function PostInput({
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setNotice('');
+
+    const reject = (message: string) => {
+      setNotice(message);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('画像サイズは5MB以下にしてください');
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      reject('画像は5MBまでです');
       return;
     }
     if (!file.type.startsWith('image/')) {
-      alert('画像ファイルを選択してください');
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      reject('画像のファイルを選んでください');
       return;
     }
 
@@ -126,38 +145,38 @@ export default function PostInput({
     setExpanded(true);
     const reader = new FileReader();
     reader.onload = () => setImagePreview(reader.result as string);
-    reader.onerror = () => {
-      alert('画像の読み込みに失敗しました');
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    };
+    reader.onerror = () => reject('画像を読めませんでした');
     reader.readAsDataURL(file);
   };
 
-  const canSend = (content.trim().length > 0 || imageFile !== null) && !isUploading;
+  const clearImage = () => {
+    setImagePreview(null);
+    setImageFile(null);
+    setNotice('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const remaining = MAX_LENGTH - content.length;
+  const canSend = (content.trim().length > 0 || imageFile !== null) && !isUploading && remaining >= 0;
 
   return (
-    <div ref={barRef} className="fixed right-0 bottom-0 left-0 z-30 mz-safe-bottom">
+    <div ref={barRef} className="mz-safe-bottom fixed right-0 bottom-0 left-0 z-30">
       <div className="mz-chrome mz-border border-t">
         <div className="mx-auto max-w-[1180px] px-4 sm:px-6 lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[260px_minmax(0,1fr)]">
           <div className="hidden lg:block" />
           <div className="lg:max-w-[760px]">
             {replyTo && replyToPost && (
-              <div className="flex items-center gap-2 py-2 border-b mz-border text-[12px] animate-fade-in">
-                <span
-                  className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold border"
-                  style={{ color: 'var(--mz-accent)', borderColor: 'var(--mz-accent)' }}
-                >
-                  返信先
+              <div className="mz-border animate-fade-in flex items-center gap-2 border-b py-2 text-[12px]">
+                <span className="mz-chip mz-chip-accent shrink-0">返信先</span>
+                <span className="mz-mono mz-ink-sub shrink-0">
+                  ID:{displayId(replyToPost.author_id)}
                 </span>
-                <span className="mz-mono mz-ink-sub shrink-0 text-[12px]">
-                  ID:{replyToPost.author_id.slice(-4)}
-                </span>
-                <span className="mz-ink-sub truncate flex-1 min-w-0">{replyToPost.content}</span>
+                <span className="mz-ink-sub min-w-0 flex-1 truncate">{replyToPost.content}</span>
                 {onCancel && (
                   <button
                     onClick={onCancel}
-                    className="mz-btn mz-btn-sm mz-btn-quiet shrink-0 px-0"
-                    style={{ width: 36, minHeight: 36 }}
+                    className="mz-btn-icon shrink-0"
+                    style={{ width: 36, height: 36, fontSize: 14 }}
                     aria-label="返信をやめる"
                   >
                     ✕
@@ -167,27 +186,38 @@ export default function PostInput({
             )}
 
             {imagePreview && (
-              <div className="pt-2 relative inline-block animate-fade-in">
+              <div className="animate-fade-in relative inline-block pt-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imagePreview} alt="プレビュー" className="max-h-28 border mz-border" />
+                <img
+                  src={imagePreview}
+                  alt="送る画像"
+                  className="mz-border max-h-28 border"
+                  style={{ borderRadius: 'var(--mz-radius-sm)' }}
+                />
                 <button
-                  onClick={() => {
-                    setImagePreview(null);
-                    setImageFile(null);
-                    if (fileInputRef.current) fileInputRef.current.value = '';
-                  }}
-                  className="absolute top-3 right-1 h-7 w-7 rounded-full bg-black/70 text-xs text-white"
+                  onClick={clearImage}
+                  className="absolute top-1 right-1 h-7 w-7 rounded-full bg-black/70 text-xs text-white"
+                  aria-label="画像を外す"
                 >
                   ✕
                 </button>
               </div>
             )}
 
+            {notice && (
+              <p
+                className="animate-fade-in pt-2 text-[12px] leading-relaxed"
+                role="status"
+                style={{ color: 'var(--mz-danger)' }}
+              >
+                {notice}
+              </p>
+            )}
+
             <div className="flex items-end gap-2 py-3">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="mz-btn mz-btn-quiet shrink-0 px-0 text-[17px]"
-                style={{ width: 44 }}
+                className="mz-btn-icon"
                 title="画像を選ぶ"
                 aria-label="画像を添付"
               >
@@ -208,20 +238,32 @@ export default function PostInput({
                 onFocus={() => setExpanded(true)}
                 placeholder={replyTo ? '返信を書く' : placeholder}
                 rows={expanded ? 3 : 1}
+                aria-label={replyTo ? '返信' : '書き込み'}
                 className="mz-field min-w-0 flex-1 resize-none"
               />
 
               <button
                 onClick={handleSubmit}
                 disabled={!canSend}
-                className="shrink-0 h-10 px-5 mz-bg-accent font-bold text-[14px] disabled:opacity-35 transition-all"
+                className="mz-btn mz-btn-primary shrink-0"
               >
                 {isUploading ? '送信中' : '書く'}
               </button>
             </div>
 
+            {/* 書き始めてから出す。普段は1行分の高さに収める */}
             {expanded && (
-              <p className="pb-2 text-[10px] mz-ink-faint">Cmd / Ctrl + Enter でも投稿できます</p>
+              <div className="mz-ink-faint flex items-baseline gap-3 pb-2 text-[10px]">
+                <span>Cmd / Ctrl + Enter でも投稿できます</span>
+                {content.length >= COUNT_FROM && (
+                  <span
+                    className="mz-mono ml-auto tabular-nums"
+                    style={{ color: remaining < 0 ? 'var(--mz-danger)' : undefined }}
+                  >
+                    残り {remaining}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>

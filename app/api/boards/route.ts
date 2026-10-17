@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
+import { displayId } from '@/lib/short-id';
 import type { BoardSummary, Participant } from '@/types';
 
 /**
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
         .map(([id, v]) => ({
           id,
           type: v.type,
-          name: v.type === 'ai' ? aiNames.get(id) || 'AI' : `ID:${id.slice(-4)}`,
+          name: v.type === 'ai' ? aiNames.get(id) || 'AI' : `ID:${displayId(id)}`,
           post_count: v.count,
         }))
         .sort((a, b) => b.post_count - a.post_count);

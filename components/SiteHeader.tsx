@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { displayId } from '@/lib/short-id';
 
 /**
  * 題字。
@@ -17,14 +18,19 @@ interface SiteHeaderProps {
 export default function SiteHeader({ userId, boardTitle, backHref }: SiteHeaderProps) {
   return (
     <header className="mz-chrome mz-border sticky top-0 z-30 h-14 border-b">
-      <div className="mx-auto flex h-14 max-w-[1180px] items-center gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-[1180px] items-center gap-2 px-3 sm:gap-3 sm:px-6">
         {backHref && (
           <Link
             href={backHref}
-            className="mz-btn mz-btn-sm mz-btn-quiet -ml-1 shrink-0"
+            className="mz-btn-icon -ml-0.5 sm:hidden"
             aria-label="板一覧へ戻る"
           >
-            ←<span className="hidden sm:inline">板一覧</span>
+            ←
+          </Link>
+        )}
+        {backHref && (
+          <Link href={backHref} className="mz-btn mz-btn-sm mz-btn-quiet hidden shrink-0 sm:inline-flex">
+            ← 板一覧
           </Link>
         )}
 
@@ -44,12 +50,20 @@ export default function SiteHeader({ userId, boardTitle, backHref }: SiteHeaderP
           )}
         </div>
 
-        <span
-          className="mz-mono mz-ink-sub mz-surface-sub mz-border shrink-0 rounded-full border px-2.5 py-1 text-[11px]"
-          title="あなたの識別子"
+        {/*
+          自分のID。
+          これまでは置いてあるだけだった。IDは引き継ぎコードと同じ「自分が誰か」の話
+          なので、押せば設定に行けるようにする。設定への入口が板一覧の袖の文章しか
+          なかったため、スマホからは辿り着けなかった。
+        */}
+        <Link
+          href="/settings"
+          className="mz-chip mz-mono shrink-0 px-2.5 py-1.5 text-[11px]"
+          aria-label="あなたのID。引き継ぎコードの画面をひらく"
+          title="あなたのID（引き継ぎコードの画面へ）"
         >
-          {userId ? userId.slice(-4) : '––––'}
-        </span>
+          {displayId(userId)}
+        </Link>
       </div>
     </header>
   );

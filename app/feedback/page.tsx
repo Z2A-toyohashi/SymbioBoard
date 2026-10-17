@@ -1,24 +1,32 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getUserId } from '@/lib/user';
-import Header from '@/components/Header';
+import { ensureUserId } from '@/lib/user';
+import SiteHeader from '@/components/SiteHeader';
 
+/**
+ * ご意見。
+ *
+ * 送れたか送れなかったかを、画面の中で伝える。
+ * 以前は失敗を alert() で出していたので、押して消すまで書いた文章が読めなかった。
+ */
 export default function FeedbackPage() {
   const [userId, setUserId] = useState<string>('');
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const id = getUserId();
-    setUserId(id);
+    ensureUserId().then(setUserId);
   }, []);
 
   const handleSubmit = async () => {
     if (!content.trim()) return;
 
     setIsSubmitting(true);
+    setError('');
+
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
@@ -33,76 +41,77 @@ export default function FeedbackPage() {
       if (res.ok) {
         setSubmitted(true);
         setContent('');
-        setTimeout(() => setSubmitted(false), 3000);
+        setTimeout(() => setSubmitted(false), 4000);
       } else {
-        alert('送信に失敗しました');
+        // 書いたものは消さない。そのまま押し直せるようにする
+        setError('送れませんでした。少し待ってもう一度押してください');
       }
-    } catch (error) {
-      console.error('Failed to submit feedback:', error);
-      alert('送信に失敗しました');
+    } catch (err) {
+      console.error('Failed to submit feedback:', err);
+      setError('送れませんでした。通信が切れているかもしれません');
     }
+
     setIsSubmitting(false);
   };
 
   return (
-    <div className="min-h-screen mz-surface-sub flex justify-center">
-      <div className="w-full max-w-2xl mz-surface min-h-screen ">
-        <Header userId={userId} title="フィードバック" />
+    <div className="min-h-screen">
+      <SiteHeader userId={userId} boardTitle="ご意見" backHref="/" />
 
-        <main className="p-6 sm:p-8">
-          <div className="mz-surface-sub border mz-border p-6 sm:p-8 ">
-            <h2 className="text-xl sm:text-2xl font-bold mz-ink mb-4">📝 感想・フィードバック</h2>
-            <p className="text-sm mz-ink-sub mb-6">
-              AI共存空間の体験についてのご感想やフィードバックをお聞かせください。
-            </p>
+      <main className="mx-auto max-w-2xl space-y-4 px-4 py-5 pb-24 sm:px-6">
+        <section className="mz-card p-4 sm:p-5">
+          <h2 className="mz-ink mb-1 text-[15px] font-bold">使ってみて気づいたこと</h2>
+          <p className="mz-ink-sub mb-3 text-[12px] leading-relaxed">
+            読むのは作っている側だけです。板には出ません。
+            名前は要りません（IDだけが一緒に届きます）。
+          </p>
 
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="感想やフィードバックを入力してください..."
-              className="w-full h-64 px-4 py-3 border mz-border focus:outline-none focus: focus: text-sm resize-none "
-            />
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="書きにくかったところ、噛み合わなかった返事、見づらかった画面など"
+            aria-label="ご意見"
+            className="mz-field h-56 resize-none"
+          />
 
-            <div className="flex justify-end mt-4">
-              <button
-                onClick={handleSubmit}
-                disabled={!content.trim() || isSubmitting}
-                className="px-8 py-3 mz-bg-accent disabled:opacity-35 transition-all font-bold text-sm hover:  "
-              >
-                {isSubmitting ? '送信中...' : '送信'}
-              </button>
-            </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleSubmit}
+              disabled={!content.trim() || isSubmitting}
+              className="mz-btn mz-btn-primary"
+            >
+              {isSubmitting ? '送信中' : '送る'}
+            </button>
 
             {submitted && (
-              <div className="mt-4 mz-bg-accent-weak border mz-border mz-accent px-4 py-3 text-sm font-medium">
-                ✓ フィードバックを送信しました。ありがとうございます！
-              </div>
+              <p className="mz-accent animate-fade-in text-[12px] font-bold" role="status">
+                送りました。ありがとうございます
+              </p>
+            )}
+            {error && (
+              <p
+                className="animate-fade-in text-[12px]"
+                role="status"
+                style={{ color: 'var(--mz-danger)' }}
+              >
+                {error}
+              </p>
             )}
           </div>
+        </section>
 
-          <div className="mt-8 mz-surface-sub border mz-border p-6">
-            <h3 className="text-lg font-bold mz-ink-sub mb-3">💡 フィードバックのヒント</h3>
-            <ul className="space-y-2 text-sm mz-ink-sub">
-              <li className="flex items-start gap-2">
-                <span className="mz-accent">•</span>
-                <span>AIの投稿は自然に感じましたか？</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mz-accent">•</span>
-                <span>空間の雰囲気はどうでしたか？</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mz-accent">•</span>
-                <span>改善してほしい点はありますか？</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mz-accent">•</span>
-                <span>追加してほしい機能はありますか？</span>
-              </li>
-            </ul>
-          </div>
-        </main>
-      </div>
+        <section className="mz-surface-sub mz-border rounded-[var(--mz-radius)] border p-4 sm:p-5">
+          <h3 className="mz-ink-sub mb-2 text-[12px] font-bold tracking-[0.12em]">
+            答えにくければ、このあたり
+          </h3>
+          <ul className="mz-ink-sub space-y-1.5 text-[13px] leading-relaxed">
+            <li>・返ってきた書き込みは、人が書いたものに見えましたか</li>
+            <li>・板の空気は、静かすぎ・騒がしすぎのどちらでしたか</li>
+            <li>・書こうとして、やめた瞬間はありましたか</li>
+            <li>・見て分からなかった表示はありましたか</li>
+          </ul>
+        </section>
+      </main>
     </div>
   );
 }

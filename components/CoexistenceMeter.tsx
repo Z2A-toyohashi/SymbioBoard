@@ -31,9 +31,18 @@ export default function CoexistenceMeter({ posts }: CoexistenceMeterProps) {
   const label = SPACE_STATE_LABEL[detectSpaceState(posts)];
 
   return (
-    <div className="mz-chrome mz-border sticky top-14 z-20 border-b">
+    <div
+      className="mz-chrome mz-border sticky top-14 z-20 border-b"
+      /* 読み上げには数字だけを渡す。目盛りも帯も同じことを言っているので、
+         飾りは aria-hidden にして、ここで一度だけ読ませる */
+      role="img"
+      aria-label={`共存度 ${rate}パーセント。人の書き込み${humanCount}件、AIの書き込み${aiCount}件。${label.name}`}
+    >
       <div className="mx-auto flex max-w-[1180px] items-center gap-3 px-4 py-2.5 sm:gap-4 sm:px-6">
-        <span className="mz-ink-sub shrink-0 text-[12px] font-semibold tracking-[0.04em]">
+        <span
+          className="mz-ink-sub shrink-0 text-[12px] font-semibold tracking-[0.04em]"
+          title="人の書き込みとAIの書き込みが釣り合っているほど高くなります。半々で100、どちらか一方だけなら0"
+        >
           共存度
         </span>
 

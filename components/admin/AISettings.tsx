@@ -475,7 +475,7 @@ function CostSummary({ settings }: { settings: Settings }) {
   const yen = (v: number) => `¥${v.toLocaleString('ja-JP')}`;
 
   return (
-    <div className="mz-surface-sub mz-border mt-4 rounded-[7px] border p-3">
+    <div className="mz-surface-sub mz-border mt-4 rounded-[var(--mz-radius-sm)] border p-3">
       <p className="mz-ink text-[13px] font-semibold">
         上限まで使った場合の月額：{yen(cost.monthlyYen)}
       </p>

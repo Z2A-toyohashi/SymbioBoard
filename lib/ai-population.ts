@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { supabase } from './supabase-client';
 import { generateAICharacterId } from './ai-id';
+import { SEED_PERSONAS, PERSONA_FORMAT_INSTRUCTION, type Persona } from './ai-personas';
 
 /**
  * AIの人口管理。
@@ -26,20 +27,6 @@ export interface PopulationResult {
   created: number;
   names: string[];
 }
-
-// GPTが使えないときに使う種。名前と性格だけ変えれば場は成立する。
-const FALLBACK_SEEDS = [
-  { name: 'のんびりAI', personality: '急がず、のんびり構えている', prompt: 'あなたはのんびりした性格です。焦らず、ゆったりした口調で短く返信してください。' },
-  { name: 'ひねくれAI', personality: '少し斜に構えているが悪意はない', prompt: 'あなたは少し斜に構えた性格です。皮肉っぽいが優しさのある一言を短く返してください。' },
-  { name: '食いしん坊AI', personality: '何でも食べ物に結びつける', prompt: 'あなたは食べ物が好きな性格です。話題を食べ物に結びつけて短く返信してください。' },
-  { name: '夜更かしAI', personality: '夜に元気になる', prompt: 'あなたは夜型の性格です。だるげだが親しみのある口調で短く返信してください。' },
-  { name: '応援AI', personality: 'とにかく背中を押す', prompt: 'あなたは応援するのが好きな性格です。相手を後押しする一言を短く返してください。' },
-  { name: '物知りAI', personality: '雑学を挟みたがる', prompt: 'あなたは雑学好きな性格です。豆知識を一つ挟みつつ短く返信してください。' },
-  { name: '聞き役AI', personality: '自分の話はせず相手に聞く', prompt: 'あなたは聞き役です。自分の話はせず、相手に短く問いかけてください。' },
-  { name: '天然AI', personality: 'ずれた受け取り方をする', prompt: 'あなたは少し天然な性格です。微妙にずれた受け取り方で短く返信してください。' },
-  { name: '職人AI', personality: '何事もこだわりで語る', prompt: 'あなたはこだわりの強い職人気質です。こだわりを一言で短く語ってください。' },
-  { name: '旅好きAI', personality: 'どこかへ行きたがる', prompt: 'あなたは旅好きな性格です。どこかの土地の話に結びつけて短く返信してください。' },
-];
 
 export async function ensureAIPopulation(
   settings: PopulationSettings,
@@ -85,8 +72,9 @@ export async function ensureAIPopulation(
         system_prompt: seed.prompt,
         created_at: Date.now(),
         last_post_time: 0,
-        // 後から来たAIほど少し控えめにして、古参が流されないようにする
-        post_frequency: Number((1.2 - i * 0.1).toFixed(2)) > 0.5 ? Number((1.2 - i * 0.1).toFixed(2)) : 0.5,
+        // 人格ごとの出やすさを基準に、後から来たAIほど少し控えめにする。
+        // 全員が同じ頻度だと、場の流れが機械的に等間隔になる
+        post_frequency: Math.max(0.5, Number((seed.post_frequency - i * 0.1).toFixed(2))),
         can_generate_images: false,
         image_generation_probability: 0.05,
         can_fetch_news: false,
@@ -107,20 +95,23 @@ export async function ensureAIPopulation(
   return { current, desired, created: names.length, names };
 }
 
-async function inventCharacter(
-  taken: Set<string>
-): Promise<{ name: string; personality: string; prompt: string } | null> {
+async function inventCharacter(taken: Set<string>): Promise<Persona | null> {
   const fromGpt = await inventWithGPT(taken);
   if (fromGpt) return fromGpt;
 
-  const available = FALLBACK_SEEDS.filter((s) => !taken.has(s.name));
+  const available = SEED_PERSONAS.filter((s) => !taken.has(s.name));
   if (available.length === 0) return null;
   return available[Math.floor(Math.random() * available.length)];
 }
 
-async function inventWithGPT(
-  taken: Set<string>
-): Promise<{ name: string; personality: string; prompt: string } | null> {
+/**
+ * 新しい住人をGPTに1体考えさせる。
+ *
+ * 以前は「短い口語で返信するよう促す1〜2文」しか求めていなかった。
+ * それだと性格の宣言しか返ってこないので、生まれた住人はみな同じ喋り方になる。
+ * 人格の差が出るのは口調と「しないこと」なので、その形を指定して書かせる。
+ */
+async function inventWithGPT(taken: Set<string>): Promise<Persona | null> {
   if (!process.env.OPENAI_API_KEY) return null;
 
   try {
@@ -133,11 +124,13 @@ async function inventWithGPT(
         {
           role: 'system',
           content:
-            '匿名掲示板に住むAIの住人を1体考えます。JSONのみを返してください。' +
+            '匿名掲示板に住む住人を1人考えます。JSONのみを返してください。' +
             'キーは name, personality, prompt の3つ。' +
-            'name は「〇〇AI」形式の短い日本語。personality は20文字程度の性格説明。' +
-            'prompt はそのAIへの指示文で、短い口語で返信するよう促す1〜2文。' +
-            '極端な属性や不快な性格は避け、雑談相手として愛嬌のある住人にしてください。',
+            'name は「〇〇AI」形式の短い日本語（管理用の呼び名で、掲示板には出ません）。' +
+            'personality は20文字程度の説明。\n\n' +
+            PERSONA_FORMAT_INSTRUCTION +
+            '\n\n極端な属性や不快な性格は避け、雑談の相手として愛嬌のある住人にしてください。' +
+            '職業や属性を一つ与えるより、癖を一つ与えてください。',
         },
         {
           role: 'user',
@@ -157,7 +150,9 @@ async function inventWithGPT(
     return {
       name: String(parsed.name).slice(0, 20),
       personality: String(parsed.personality).slice(0, 60),
-      prompt: String(parsed.prompt).slice(0, 300),
+      // 人格は4つの見出しぶんの長さが要る。300字で切ると〔しないこと〕が落ちる
+      prompt: String(parsed.prompt).slice(0, 1200),
+      post_frequency: 1.0,
     };
   } catch (error) {
     console.error('AI character generation via GPT failed:', error);

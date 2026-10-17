@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { getUserId } from '@/lib/user';
+import { ensureUserId } from '@/lib/user';
 import Header from '@/components/Header';
 
 interface Message {
@@ -28,8 +28,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const id = getUserId();
-    setUserId(id);
+    ensureUserId().then(setUserId);
 
     // ローカルストレージから会話履歴を読み込む
     const saved = localStorage.getItem('chat-history');
