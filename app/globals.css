@@ -70,8 +70,9 @@
   --mz-chrome: rgba(250, 242, 232, 0.86);
 
   /* 丸み。ここを小さくすれば硬い掲示板の顔に戻る */
-  --mz-radius: 20px;
-  --mz-radius-sm: 14px;
+  --mz-radius: 16px;
+  --mz-radius-lg: 22px;
+  --mz-radius-sm: 12px;
   --mz-radius-pill: 999px;
 
   --mz-border-w: 2px;
@@ -116,15 +117,26 @@
   }
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+/*
+  余白のリセット。
 
-html {
-  color-scheme: light dark;
-  -webkit-text-size-adjust: 100%;
+  ここを @layer base の外に書くと、レイヤーに属さない規則として
+  Tailwind の px-4 や、下で定義している .mz-btn の padding より強くなる。
+  結果、画面じゅうの余白が無言で消える。文字が枠に触れ、ボタンが文字に
+  貼り付いて押しづらくなるのはこれが原因だった。
+  リセットは必ず base 層の中に置く。
+*/
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    color-scheme: light dark;
+    -webkit-text-size-adjust: 100%;
+  }
 }
 
 body {
@@ -354,9 +366,10 @@ h3 {
     opacity: 0.5;
   }
 
+  /* 小さく見せるのは字と高さだけ。押せる範囲は44pxを割らない */
   .mz-btn-sm {
-    min-height: 38px;
-    padding: 0 1rem;
+    min-height: 44px;
+    padding: 0 1.1rem;
     font-size: 13px;
     box-shadow: var(--mz-pop-sm);
   }
@@ -491,6 +504,40 @@ h3 {
     padding: 0.7rem 1.15rem;
   }
 
+  /*
+    親指のボタン。
+    スマホは画面の右下が一番押しやすい。いちばんしてほしいこと（板を立てる）は
+    文章の流れの中ではなく、指の届くところに置く。
+    広い画面では出さない（本文の脇に同じものがあるため）。
+  */
+  .mz-fab {
+    position: fixed;
+    right: 1rem;
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    z-index: 40;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
+    min-height: 56px;
+    padding: 0 1.5rem;
+    border-radius: var(--mz-radius-pill);
+    border: var(--mz-border-w) solid var(--mz-line);
+    background: var(--mz-ink);
+    color: var(--mz-paper);
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 4px 4px 0 var(--mz-line);
+    transition: transform 110ms ease-out, box-shadow 110ms ease-out;
+    touch-action: manipulation;
+  }
+  .mz-fab:active {
+    transform: translate(4px, 4px);
+    box-shadow: 0 0 0 var(--mz-line);
+  }
+
   /* 読み込み中の場所取り --------------------------------------- */
   .mz-skeleton {
     background: linear-gradient(
@@ -571,6 +618,7 @@ input[type='checkbox'] {
   }
   .mz-btn:active,
   .mz-btn-icon:active,
+  .mz-fab:active,
   .mz-stepper:active {
     transform: none;
   }

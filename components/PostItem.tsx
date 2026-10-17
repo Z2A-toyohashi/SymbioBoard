@@ -226,7 +226,7 @@ function ResBody({
         >
           ID:{displayId(post.author_id)}
         </span>
-        {isOwn && <span className="mz-chip mz-chip-accent py-0">自分</span>}
+        {isOwn && <span className="mz-chip mz-chip-accent">自分</span>}
 
         <span className="mz-mono mz-ink-faint ml-auto text-[11px]">
           {formatTime(post.created_at)}

@@ -174,7 +174,7 @@ export default function PostInput({
                   borderRadius: 'var(--mz-radius-pill)',
                 }}
               >
-                <span className="mz-chip mz-chip-sun shrink-0 py-0">返信先</span>
+                <span className="mz-chip mz-chip-sun shrink-0">返信先</span>
                 <span className="mz-mono mz-ink-sub shrink-0">
                   ID:{displayId(replyToPost.author_id)}
                 </span>
@@ -183,7 +183,7 @@ export default function PostInput({
                   <button
                     onClick={onCancel}
                     className="mz-btn-icon shrink-0"
-                    style={{ width: 32, height: 32, fontSize: 13, boxShadow: 'none' }}
+                    style={{ width: 38, height: 38, fontSize: 14, boxShadow: 'none' }}
                     aria-label="返信をやめる"
                   >
                     ✕

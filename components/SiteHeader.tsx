@@ -64,8 +64,8 @@ export default function SiteHeader({ userId, boardTitle, backHref }: SiteHeaderP
         */}
         <Link
           href="/settings"
-          className="mz-chip mz-mono shrink-0 px-2.5 py-1.5 text-[11px]"
-          style={{ boxShadow: 'var(--mz-pop-sm)' }}
+          className="mz-chip mz-mono shrink-0 px-3 text-[12px]"
+          style={{ boxShadow: 'var(--mz-pop-sm)', minHeight: 36 }}
           aria-label="あなたのID。引き継ぎコードの画面をひらく"
           title="あなたのID（引き継ぎコードの画面へ）"
         >

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { BoardSummary } from '@/types';
 import { ensureUserId } from '@/lib/user';
@@ -17,6 +17,25 @@ export default function BoardListPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
+  const formRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * 板を立てる欄を開く。
+   *
+   * 親指のボタン（画面右下）は一覧の途中で押されるので、
+   * 開いただけだと欄が画面の外にいて「押したのに何も起きない」ように見える。
+   * 開いたら必ず欄まで運ぶ。
+   */
+  const openForm = () => {
+    setError('');
+    setCreating((wasOpen) => {
+      if (wasOpen) return false;
+      requestAnimationFrame(() => {
+        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      return true;
+    });
+  };
 
   useEffect(() => {
     // IDの発行はサーバに頼むので、自分のIDが分かるのは一呼吸あと。
@@ -94,7 +113,7 @@ export default function BoardListPage() {
     <div className="min-h-screen">
       <SiteHeader userId={userId} />
 
-      <main className="mx-auto max-w-[1180px] px-4 py-5 pb-24 sm:px-6">
+      <main className="mx-auto max-w-[1180px] px-4 py-5 pb-28 sm:px-6 sm:pb-24">
         <div className="gap-10 lg:grid lg:grid-cols-[minmax(0,1fr)_280px]">
           <div>
             {/*
@@ -103,11 +122,11 @@ export default function BoardListPage() {
               一行だけ添えて、いちばん押してほしいものを大きく置く。
             */}
             <section
-              className="relative mb-5 overflow-hidden px-5 py-5 sm:px-7 sm:py-6"
+              className="relative mb-5 overflow-hidden px-5 py-6 sm:px-8 sm:py-7"
               style={{
                 background: 'var(--mz-surface-sub)',
                 border: 'var(--mz-border-w) solid var(--mz-line)',
-                borderRadius: 'var(--mz-radius)',
+                borderRadius: 'var(--mz-radius-lg)',
                 boxShadow: 'var(--mz-pop)',
               }}
             >
@@ -121,31 +140,35 @@ export default function BoardListPage() {
                   名前はありません。手がかりは4桁のIDだけ。
                   話したいことがあれば、部屋（板）を立ててください。
                 </p>
+                {/* 狭い画面では右下の親指ボタンが同じ役をするので、ここには出さない */}
                 <button
-                  onClick={() => {
-                    setCreating((v) => !v);
-                    setError('');
-                  }}
-                  className={`mz-btn mz-btn-lg mt-4 ${creating ? 'mz-btn-quiet' : 'mz-btn-primary'}`}
+                  onClick={openForm}
+                  className={`mz-btn mz-btn-lg mt-5 hidden sm:inline-flex ${
+                    creating ? 'mz-btn-quiet' : 'mz-btn-primary'
+                  }`}
                 >
                   {creating ? 'やめる' : '板を立てる'}
                 </button>
               </div>
 
-              {/* 右上の落書き。狭い画面では文章と重なるので出さない */}
+              {/*
+                右側の落書き。
+                枠線にまたがると、絵ではなく「はみ出した何か」に見える。
+                必ず内側に収め、文章と重ならない幅のときだけ出す。
+              */}
               <span
-                className="mz-ink pointer-events-none absolute -top-2 right-4 hidden sm:block"
+                className="mz-ink pointer-events-none absolute top-5 right-6 hidden md:block"
                 aria-hidden
               >
-                <Doodle name="sparkle" size={28} fill="var(--mz-sun)" className="mz-sway" />
+                <Doodle name="sparkle" size={26} fill="var(--mz-sun)" className="mz-sway" />
               </span>
               <span
-                className="mz-ink pointer-events-none absolute right-8 bottom-2 hidden sm:block"
+                className="mz-ink pointer-events-none absolute right-8 bottom-6 hidden md:block"
                 aria-hidden
               >
                 <Doodle
                   name="mug"
-                  size={46}
+                  size={44}
                   fill="var(--mz-surface)"
                   className="mz-sway"
                   style={{ animationDelay: '2s' }}
@@ -154,7 +177,7 @@ export default function BoardListPage() {
             </section>
 
             {creating && (
-              <div className="mz-card animate-fade-in mb-5 p-4">
+              <div ref={formRef} className="mz-card animate-fade-in mb-5 p-4 sm:p-5">
                 <h3 className="mz-display mz-ink mb-3 text-[15px] font-bold">新しい板</h3>
                 <input
                   value={title}
@@ -241,15 +264,15 @@ export default function BoardListPage() {
                     <div key={board.id} className="mz-card overflow-hidden">
                       <Link
                         href={`/b/${board.id}`}
-                        className="block px-4 pt-3.5 pb-2 transition-colors hover:bg-[var(--mz-surface-sub)]"
+                        className="block px-5 pt-4 pb-3 transition-colors hover:bg-[var(--mz-surface-sub)]"
                       >
                         {/* 1行目：板名と、どれだけ書かれているか */}
                         <div className="flex items-center gap-2">
-                          <h3 className="mz-display mz-ink min-w-0 truncate text-[18px] font-black tracking-[-0.01em]">
+                          <h3 className="mz-display mz-ink min-w-0 truncate text-[18px] leading-tight font-black tracking-[-0.01em]">
                             {board.title}
                           </h3>
                           {board.is_default && (
-                            <span className="mz-chip mz-chip-sun shrink-0 py-0">既定</span>
+                            <span className="mz-chip mz-chip-sun shrink-0">既定</span>
                           )}
                           <span className="mz-mono mz-ink-sub ml-auto shrink-0 text-[11px] tabular-nums">
                             {board.thread_count}スレ / {board.post_count}レス
@@ -305,8 +328,14 @@ export default function BoardListPage() {
                       </Link>
 
                       {/* 3行目：開設の記録。板を選ぶのに要らないので、押せる面から外す */}
+                      {/*
+                        開設の記録。
+                        「閉じる」が入る板だけ背が伸びて、下に空白が空いて見えていた。
+                        行の高さを先に決めて、どの板も同じ高さで終わるようにする。
+                        左右の余白も広めに取る。角の丸みに文字が食われるため。
+                      */}
                       <div
-                        className="mz-ink-faint mz-border flex flex-wrap items-center gap-2 border-t px-4 py-1.5 text-[11px]"
+                        className="mz-ink-faint mz-border flex min-h-[40px] flex-wrap items-center gap-2 border-t px-5 py-1 text-[11px]"
                         style={{ background: 'var(--mz-surface-sub)' }}
                       >
                         <span className="mz-mono shrink-0">{formatDate(board.created_at)} 開設</span>
@@ -321,6 +350,7 @@ export default function BoardListPage() {
                           <button
                             onClick={() => closeBoard(board)}
                             className="mz-tap mz-ink-sub ml-auto shrink-0 text-[11px] underline"
+                            style={{ minHeight: 40 }}
                           >
                             閉じる
                           </button>
@@ -373,6 +403,15 @@ export default function BoardListPage() {
           </aside>
         </div>
       </main>
+
+      {/*
+        親指のボタン。
+        スマホで一番押しやすいのは画面の右下なので、いちばんしてほしいことを置く。
+        広い画面では入口のボタンが同じ役をするので出さない。
+      */}
+      <button onClick={openForm} className="mz-fab sm:hidden" aria-expanded={creating}>
+        {creating ? 'やめる' : '＋ 板を立てる'}
+      </button>
     </div>
   );
 }
