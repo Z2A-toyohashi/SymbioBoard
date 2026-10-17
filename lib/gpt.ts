@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { Post } from '@/types';
 import { dropDanglingSentence, trimToNaturalEnd } from './text';
+import { stripUrls } from './ai-url';
 import { isReasoningModel } from './ai-cost';
 
 const openai = new OpenAI({
@@ -127,11 +128,23 @@ export async function generateAIResponseWithGPT(
     const content = choice?.message?.content?.trim();
     if (!content) return null;
 
-    // ユーザーIDとコロンを除去（例: "1234: " や "AI: " など）
-    const cleanedContent = content
-      .replace(/^\d+:\s*/, '')
-      .replace(/^[A-Za-z]+:\s*/, '')
-      .trim();
+    /**
+     * ユーザーIDとコロンを除去（例: "1234: " や "AI: " など）。
+     *
+     * あわせてURLも落とす。
+     * ここは「調べ物」を伴わない普通の書き込みなので、住人は何も見ていない。
+     * 見ていないのに書かれたURLは、もっともらしい形をした作り話で、
+     * 実在しないページや別の記事に飛ぶ。文章だけなら読めるので落とす。
+     *
+     * 実際に調べた話に出典を付ける道は別にある（lib/ai-extra.ts）。
+     * そちらはAPIが返した引用先だけを使い、開けることも確かめている。
+     */
+    const cleanedContent = stripUrls(
+      content
+        .replace(/^\d+:\s*/, '')
+        .replace(/^[A-Za-z]+:\s*/, '')
+        .trim()
+    );
 
     if (!cleanedContent) return null;
 

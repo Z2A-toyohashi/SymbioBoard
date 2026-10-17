@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { supabase } from './supabase-client';
 import { trimToNaturalEnd } from './text';
+import { citationUrls, extractUrls, pickSafeUrl, stripUrls } from './ai-url';
 
 /**
  * 書き込みに添える写真と、調べ物。
@@ -192,6 +193,7 @@ export async function searchAndComment(options: {
     `・${options.maxLength}文字以内。引用や箇条書きにせず、話し言葉で。`,
     '・「検索しました」「調べた結果」のような前置きは書きません。',
     '・出典が必要なら、文末に改行を置いてURLを1つだけ。',
+    '・URLは、実際に開いて読んだページのものだけ。思い出しで書かない。',
   ]
     .filter(Boolean)
     .join('\n');
@@ -229,11 +231,21 @@ export async function searchAndComment(options: {
     const text = response.output_text?.trim();
     if (!text) return null;
 
-    // URLは本文と分けて扱い、文字数の勘定には入れない
-    const urlMatch = text.match(/https?:\/\/\S+$/);
-    const url = urlMatch ? urlMatch[0] : '';
-    const body = (url ? text.slice(0, text.length - url.length) : text).trim();
+    /**
+     * 貼るURLの決め方。
+     *
+     * 以前は、本文の末尾に書かれた文字列をそのままURLとして貼っていた。
+     * 言語モデルはもっともらしい形のURLを平気で作るので、
+     * 実在しないページや、消えたページ、まったく別の記事へ飛んでいた。
+     *
+     * 本文に打たれた文字は当てにせず、APIが返した引用先（実際に開いたページ）
+     * から選ぶ。そのうえで、いま開けるかどうかも確かめる。
+     * どれも通らなければURLは貼らない。文章だけでも読める。
+     */
+    const body = stripUrls(text);
     if (!body) return null;
+
+    const url = await pickSafeUrl(citationUrls(response), extractUrls(text));
 
     const trimmed = trimToNaturalEnd(body, options.maxLength);
     return { content: url ? `${trimmed}\n${url}` : trimmed, mediaUrl: null };

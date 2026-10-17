@@ -23,12 +23,19 @@ function failed(where: string, error: unknown) {
   const detail = error as { message?: string; code?: string } | null;
   console.error(`Stamp API failed at ${where}:`, error);
 
-  if (detail?.code === '42P01') {
+  // 42P01 はPostgreSQL、PGRST205 はPostgRESTがテーブルを見つけられない場合。
+  // Supabase は後者を「schema cache に無い」という言い方で返す
+  const missingTable =
+    detail?.code === '42P01' ||
+    detail?.code === 'PGRST205' ||
+    (detail?.message || '').includes('schema cache');
+
+  if (missingTable) {
     return NextResponse.json(
       {
         error: 'スタンプの台帳がまだありません。migration-011-stamps.sql を実行してください',
         where,
-        code: detail.code,
+        code: detail?.code,
       },
       { status: 503 }
     );
