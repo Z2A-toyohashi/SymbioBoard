@@ -10,18 +10,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Post ID required' }, { status: 400 });
     }
 
+    // 押された順に並べる。画面では「誰が押したか」をこの順で出す
     const { data, error } = await supabase
       .from('reactions')
       .select('*')
-      .eq('post_id', postId);
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true });
 
     if (error) throw error;
 
     // 絵文字ごとにまとめる。
-    // 誰がAIかは返さない。板では人もAIも同じ資格で押しているので、
-    // 画面に出さないだけでなく、そもそもクライアントに渡さない。
-    // （以前は id が 'ai-' で始まるかで判定して isAI を返していたが、
-    //   AIのIDを4桁の数字に揃えたのでその判定自体が成り立たない）
+    //
+    // 返すのは押した人のIDだけで、それが人かAIかは返さない。
+    // IDは人もAIも同じ4桁の数字なので、IDを出しても書き手の正体は割れない。
+    // 逆に、ここで人かAIかの印を付けて返すと、画面に出さなくても
+    // 通信を覗けば分かってしまう。だから最初から持たせない。
     const grouped: Record<string, { count: number; users: Array<{ id: string }> }> = {};
     (data || []).forEach((reaction: { emoji: string; user_id: string }) => {
       if (!grouped[reaction.emoji]) {

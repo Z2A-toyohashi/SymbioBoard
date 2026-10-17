@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Post } from '@/types';
 import { formatTime } from '@/lib/utils';
 import { displayId } from '@/lib/short-id';
@@ -36,8 +36,14 @@ interface PostItemProps {
   onReactionUpdate?: () => void;
 }
 
-type ReactionMap = Record<string, { count: number; userReacted: boolean }>;
+type ReactionMap = Record<string, { count: number; userReacted: boolean; users: string[] }>;
 
+/** 長押しと見なすまでの時間。短いと、押すつもりが開いてしまう */
+const PEEK_HOLD_MS = 420;
+/** マウスを載せてから出るまで。すぐ出ると、通り過ぎただけで開く */
+const PEEK_HOVER_MS = 320;
+
+// 住人側（lib/ai-manager.ts の REACTION_EMOJIS）と同じ並びにしておく
 const EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀'];
 
 export default function PostItem({
@@ -52,6 +58,45 @@ export default function PostItem({
 }: PostItemProps) {
   const [showPicker, setShowPicker] = useState(false);
   const [reactions, setReactions] = useState<ReactionMap>({});
+
+  /**
+   * 誰が押したかを覗く。
+   *
+   * スマホは長押し、パソコンはマウスを重ねるか右クリック。
+   * pinned は「押さえて開いた」状態で、外を触るまで閉じない。
+   * マウスを重ねただけのときは、離れれば閉じる。
+   */
+  const [peek, setPeek] = useState<{ emoji: string; pinned: boolean } | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 長押しで開いたあと、指を離した拍子にスタンプが押されるのを止める
+  const heldRef = useRef(false);
+
+  const cancelHold = () => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  };
+
+  const startHold = (emoji: string, delay: number, pinned: boolean) => {
+    cancelHold();
+    holdTimer.current = setTimeout(() => {
+      if (pinned) heldRef.current = true;
+      setPeek({ emoji, pinned });
+    }, delay);
+  };
+
+  useEffect(() => cancelHold, []);
+
+  // 開いている間は Esc で閉じられるようにする
+  useEffect(() => {
+    if (!peek) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPeek(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [peek]);
 
   useEffect(() => {
     loadReactions();
@@ -68,8 +113,9 @@ export default function PostItem({
           const typed = info as { count: number; users: Array<{ id: string }> };
           next[emoji] = {
             count: typed.count,
-            // 誰が押したかは出さない。AIが押したものだけ分かってしまうため
             userReacted: currentUserId ? typed.users.some((u) => u.id === currentUserId) : false,
+            // 押した人のID。板に出ているIDと同じ4桁で、人かAIかは分からないまま
+            users: typed.users.map((u) => u.id),
           };
         });
         setReactions(next);
@@ -122,24 +168,95 @@ export default function PostItem({
       />
 
       <div className="flex flex-wrap items-center gap-2.5 px-3 text-[12px] sm:px-4">
-        {Object.entries(reactions).map(([emoji, info]) => (
-          <button
-            key={emoji}
-            onClick={() => handleReaction(emoji)}
-            className="mz-mono my-1.5 inline-flex min-h-[32px] items-center gap-1 rounded-full px-2.5 tabular-nums transition-transform active:scale-95"
-            aria-pressed={info.userReacted}
-            aria-label={`${emoji} ${info.count}件${info.userReacted ? '（自分も押した）' : ''}`}
-            style={{
-              border: '1.5px solid',
-              borderColor: info.userReacted ? 'var(--mz-accent)' : 'var(--mz-line-soft)',
-              background: info.userReacted ? 'var(--mz-accent-weak)' : 'var(--mz-surface)',
-              color: info.userReacted ? 'var(--mz-accent)' : 'var(--mz-ink-sub)',
-            }}
-          >
-            <span className="text-[14px]">{emoji}</span>
-            {info.count}
-          </button>
-        ))}
+        {Object.entries(reactions).map(([emoji, info]) => {
+          const who = info.users.map((id) => `ID:${displayId(id)}`).join('、');
+          const open = peek?.emoji === emoji;
+
+          return (
+            <span key={emoji} className="relative">
+              <button
+                onClick={(e) => {
+                  // 長押しで開いた直後は、押した扱いにしない
+                  if (heldRef.current) {
+                    heldRef.current = false;
+                    e.preventDefault();
+                    return;
+                  }
+                  handleReaction(emoji);
+                }}
+                onPointerDown={(e) => {
+                  if (e.pointerType !== 'mouse') startHold(emoji, PEEK_HOLD_MS, true);
+                }}
+                onPointerUp={cancelHold}
+                onPointerCancel={cancelHold}
+                onMouseEnter={() => startHold(emoji, PEEK_HOVER_MS, false)}
+                onMouseLeave={() => {
+                  cancelHold();
+                  setPeek((prev) => (prev && prev.emoji === emoji && !prev.pinned ? null : prev));
+                }}
+                onContextMenu={(e) => {
+                  // パソコンでは右クリックでも開く（長押しの代わり）
+                  e.preventDefault();
+                  cancelHold();
+                  heldRef.current = false;
+                  setPeek({ emoji, pinned: true });
+                }}
+                className="mz-mono my-1.5 inline-flex min-h-[32px] items-center gap-1 rounded-full px-2.5 tabular-nums transition-transform active:scale-95"
+                aria-pressed={info.userReacted}
+                aria-label={`${emoji} ${info.count}件${
+                  info.userReacted ? '（自分も押した）' : ''
+                }。押した人 ${who}`}
+                title={`${emoji} を押した人: ${who}`}
+                style={{
+                  border: '1.5px solid',
+                  borderColor: info.userReacted ? 'var(--mz-accent)' : 'var(--mz-line-soft)',
+                  background: info.userReacted ? 'var(--mz-accent-weak)' : 'var(--mz-surface)',
+                  color: info.userReacted ? 'var(--mz-accent)' : 'var(--mz-ink-sub)',
+                }}
+              >
+                <span className="text-[14px]">{emoji}</span>
+                {info.count}
+              </button>
+
+              {open && (
+                <>
+                  {/* 押さえて開いたときだけ、外を触って閉じる面を敷く */}
+                  {peek?.pinned && (
+                    <div className="fixed inset-0 z-20" onClick={() => setPeek(null)} />
+                  )}
+                  <div
+                    className="mz-card animate-fade-in absolute bottom-full left-0 z-30 mb-2 w-max max-w-[16rem] p-2.5"
+                    role="dialog"
+                    aria-label={`${emoji} を押した人`}
+                  >
+                    <p className="mz-ink-faint mb-1.5 text-[10px] leading-none">
+                      {emoji} を押した人
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {info.users.map((id, i) => {
+                        const mine = id === currentUserId;
+                        return (
+                          <span
+                            key={`${id}-${i}`}
+                            className="mz-chip mz-mono text-[11px]"
+                            style={
+                              mine
+                                ? { background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }
+                                : { borderColor: 'var(--mz-line-soft)' }
+                            }
+                          >
+                            {displayId(id)}
+                            {mine && ' あなた'}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </span>
+          );
+        })}
 
         <div className="relative">
           <button
@@ -153,17 +270,25 @@ export default function PostItem({
           {showPicker && (
             <>
               <div className="fixed inset-0 z-20" onClick={() => setShowPicker(false)} />
-              <div className="mz-card animate-fade-in absolute bottom-full left-0 z-30 mb-1.5 flex gap-0.5 p-1.5">
-                {EMOJIS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => handleReaction(emoji)}
-                    className="rounded-full px-2 py-1.5 text-[20px] transition-transform hover:scale-125 active:scale-95"
-                    aria-label={`${emoji} を押す`}
-                  >
-                    {emoji}
-                  </button>
-                ))}
+              <div className="mz-card animate-fade-in absolute bottom-full left-0 z-30 mb-1.5 w-max p-1.5">
+                <div className="flex gap-0.5">
+                  {EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => handleReaction(emoji)}
+                      className="rounded-full px-2 py-1.5 text-[20px] transition-transform hover:scale-125 active:scale-95"
+                      aria-label={`${emoji} を押す`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+                {/* 長押しは見ただけでは分からないので、ここで一度だけ伝える */}
+                <p className="mz-ink-faint mt-1 px-1 pb-0.5 text-[10px] leading-tight">
+                  押された数を長押し（パソコンは重ねるか右クリック）すると、
+                  <br />
+                  誰が押したかが出ます
+                </p>
               </div>
             </>
           )}

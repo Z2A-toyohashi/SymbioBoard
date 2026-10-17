@@ -74,23 +74,31 @@ export async function getAICharacter(aiId: string): Promise<AICharacter | null> 
 }
 
 /**
- * AIキャラクターがリアクションする確率を判定
+ * 住人がスタンプを押すかどうか。
+ *
+ * 書き込みと違って生成を伴わないので、押しても費用はかからない。
+ * それなのに確率を低く置いていたため、板に押された跡がほとんど残らず、
+ * 書いたものが読まれているのかどうかが分からない画面になっていた。
+ *
+ * スタンプは「返事をするほどではないが、見た」という合図で、
+ * 掲示板で一番軽いやり取りなので、本来いちばん多く起きていい。
+ * 止まっている板ほど押しやすくする（誰かが見ていることだけが伝わる）。
  */
 export function shouldAIReact(spaceState: string): boolean {
   const probabilities: Record<string, number> = {
-    FLOW: 0.1,
-    SILENCE: 0.3,
-    FRAGILE: 0.2,
-    SOLO: 0.4,
+    FLOW: 0.35,
+    SILENCE: 0.6,
+    FRAGILE: 0.5,
+    SOLO: 0.7,
   };
-  
-  return Math.random() < (probabilities[spaceState] || 0.2);
+
+  return Math.random() < (probabilities[spaceState] ?? 0.45);
 }
 
 /**
- * ランダムに絵文字を選択
+ * 押せるスタンプ。
+ * 画面側（components/PostItem.tsx）の並びと同じものを使う。
+ * あちらは画面用のファイルなので、ここを読むとデータベースの接続まで
+ * 画面側に持ち込むことになる。そのため、同じ並びを両方に置いている。
  */
-export function selectRandomEmoji(): string {
-  const emojis = ['👍', '❤️', '😂', '🎉', '🤔', '👀'];
-  return emojis[Math.floor(Math.random() * emojis.length)];
-}
+export const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀'];

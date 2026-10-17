@@ -4,7 +4,7 @@ import { detectSpaceState } from './ai-logic';
 import { generateAIResponseWithGPT } from './gpt';
 import { buildResidentPrompt } from './prompt';
 import { ensureAIPopulation } from './ai-population';
-import { shouldAIReact, selectRandomEmoji } from './ai-manager';
+import { shouldAIReact, REACTION_EMOJIS } from './ai-manager';
 import { generateMatchingImage, searchAndComment } from './ai-extra';
 import { maybeCreateBoard } from './ai-board';
 
@@ -434,21 +434,67 @@ async function speakOnClaimedBoard(
    *
    * 直前の書き込みに無条件で返すと、AIがAIに返し、それにまたAIが返す。
    * 人がいない時間帯ほどそうなり、板がAI同士の会話で埋まる。
-   * 読む側から見れば、誰も読んでいない会話が流れているだけになる。
+   * それを避けるために返信の確率をかなり下げていたのだが、下げすぎていた。
    *
-   *   1. 返信先は、人の書き込みを優先して選ぶ
-   *   2. 相手がAIしかいない場合は、返信の確率を大きく下げる
-   *   3. 自分自身の書き込みには返信しない
+   * 結果、板は「20スレ/24レス」のような姿になっていた。
+   * 話しかけた数ばかりが増えて、誰も誰にも答えていない。
+   * 掲示板として読めるのは、新しい話題が並ぶからではなく、
+   * 書いたものに誰かが応えるからなので、これでは場にならない。
+   *
+   * そこで、次の順に考える。
+   *
+   *   1. 返事のついていない書き込みがあるなら、まずそれに返す
+   *   2. 返信先は人の書き込みを優先する
+   *   3. AI同士で延びすぎた流れには、それ以上ぶら下がらない
    */
-  const replyChance: Record<string, number> = { SOLO: 0.8, FRAGILE: 0.4, SILENCE: 0.2, FLOW: 0.1 };
+  const replyChance: Record<string, number> = { SOLO: 0.9, FRAGILE: 0.75, SILENCE: 0.65, FLOW: 0.45 };
 
-  const candidates = posts.slice(0, 6).filter((p) => p.author_id !== aiCharacter.id);
-  const humanTargets = candidates.filter((p) => p.author_type === 'user');
-  const target = humanTargets[0] ?? candidates[0];
+  const byId = new Map(posts.map((p) => [p.id, p]));
+  const hasReply = new Set(posts.map((p) => p.thread_id).filter(Boolean) as string[]);
 
-  // 人への返信はそのまま。AI相手は1/4に落とす
-  const base = replyChance[state] ?? 0;
-  const chance = target && target.author_type === 'user' ? base : base * 0.25;
+  /**
+   * その書き込みが、AIだけのやり取りの何代目か。
+   * 人が一人でも挟まっていれば0に戻す。
+   * 3代続いたらもう足さない。読む人のいない会話が伸びるだけなので。
+   */
+  const aiChainDepth = (post: Post): number => {
+    let depth = 0;
+    let cursor: Post | undefined = post;
+    while (cursor && cursor.author_type === 'ai' && depth < 8) {
+      depth++;
+      cursor = cursor.thread_id ? byId.get(cursor.thread_id) : undefined;
+    }
+    return depth;
+  };
+
+  const candidates = posts
+    .slice(0, 8)
+    .filter((p) => p.author_id !== aiCharacter.id)
+    .filter((p) => aiChainDepth(p) < 3);
+
+  const unanswered = candidates.filter((p) => !hasReply.has(p.id));
+  const unansweredHuman = unanswered.filter((p) => p.author_type === 'user');
+  const recentHuman = candidates.filter((p) => p.author_type === 'user');
+
+  const target =
+    unansweredHuman[0] ?? recentHuman[0] ?? unanswered[0] ?? candidates[0];
+
+  let chance = replyChance[state] ?? 0;
+
+  // AI相手は下げる。ただし四分の一まで落とすと、人のいない時間に誰も応えなくなる
+  if (target && target.author_type === 'ai') chance *= 0.55;
+
+  /**
+   * 置き去りが溜まっているときは、新しい話題より先に返す。
+   * 返事のない書き込みが並んでいる板に、さらに話題を足しても読めるものにならない。
+   *
+   * ただし相手もAIなら上げ幅は抑える。ここを人と同じだけ上げると、
+   * 人がいない時間に、返事のないAIの書き込みへAIが返し続ける板になる。
+   */
+  if (unanswered.length >= 2) {
+    chance = Math.max(chance, target?.author_type === 'user' ? 0.9 : 0.6);
+  }
+
   const shouldReply = Boolean(target) && Math.random() < chance;
 
   // 返信先はそのレス自身。板の表示が一本になったので、
@@ -766,44 +812,88 @@ async function withinDailyLimit(kind: 'image' | 'search', config: AIConfig): Pro
  *
  * 押す先は人の書き込みを優先する。AI同士で押し合っても場は温まらないし、
  * 押された側からすると「誰かが見ている」ことだけが伝わればよい。
+ *
+ * 以前は相手も絵文字も完全な運任せだったので、
+ * 既に押してある同じ組み合わせを引いては一意制約で弾かれ、
+ * その回は何も起きずに終わっていた。空振りのぶんだけ、
+ * 画面に残るスタンプが設定値より目に見えて少なくなる。
+ * いま押されているものを先に見て、空いているところを選ぶ。
  */
 async function reactSometimes(posts: Post[], state: string): Promise<boolean> {
   if (!shouldAIReact(state)) return false;
 
-  // 直近の書き込みから、人が書いたものを優先して選ぶ
-  const recent = posts.slice(0, 8);
-  const humanPosts = recent.filter((p) => p.author_type === 'user');
-  const pool = humanPosts.length > 0 ? humanPosts : recent;
-  if (pool.length === 0) return false;
-
-  const target = pool[Math.floor(Math.random() * pool.length)];
+  const recent = posts.slice(0, 10);
+  if (recent.length === 0) return false;
 
   const { data: characters } = await supabase.from('ai_characters').select('id');
   if (!characters || characters.length === 0) return false;
 
-  // 自分の書き込みには押さない
-  const others = characters.filter((c) => (c.id as string) !== target.author_id);
-  if (others.length === 0) return false;
+  // いま押されているもの。post_id → 「誰が何を押したか」
+  const { data: existing } = await supabase
+    .from('reactions')
+    .select('post_id, user_id, emoji')
+    .in(
+      'post_id',
+      recent.map((p) => p.id)
+    );
 
-  const reactingAI = others[Math.floor(Math.random() * others.length)].id as string;
-  await ensureAIUser(reactingAI);
-
-  const { error } = await supabase.from('reactions').insert([
-    {
-      post_id: target.id,
-      user_id: reactingAI,
-      emoji: selectRandomEmoji(),
-      created_at: Date.now(),
-    },
-  ]);
-
-  // 同じ絵文字が既に押されている場合は一意制約で弾かれる。異常ではない
-  if (error && !error.message.includes('duplicate')) {
-    console.error('AI reaction failed:', error.message);
-    return false;
+  const pressed = new Map<string, Set<string>>();
+  for (const row of existing || []) {
+    const key = row.post_id as string;
+    if (!pressed.has(key)) pressed.set(key, new Set());
+    pressed.get(key)!.add(`${row.user_id}:${row.emoji}`);
   }
 
-  return !error;
+  const pressCount = (postId: string) => pressed.get(postId)?.size ?? 0;
+
+  /**
+   * 押す相手。
+   * 人の書き込みを先に、そのうち押された数が少ないものから選ぶ。
+   * 同じ書き込みにばかり溜まると、他が読まれていないように見える。
+   */
+  const humanPosts = recent.filter((p) => p.author_type === 'user');
+  const pool = (humanPosts.length > 0 ? humanPosts : recent)
+    .slice()
+    .sort((a, b) => pressCount(a.id) - pressCount(b.id));
+
+  for (const target of pool.slice(0, 4)) {
+    const taken = pressed.get(target.id) ?? new Set<string>();
+
+    // 自分の書き込みには押さない
+    const others = characters.filter((c) => (c.id as string) !== target.author_id);
+
+    for (const character of shuffle(others)) {
+      const aiId = character.id as string;
+      const free = REACTION_EMOJIS.filter((e) => !taken.has(`${aiId}:${e}`));
+      if (free.length === 0) continue;
+
+      const emoji = free[Math.floor(Math.random() * free.length)];
+      await ensureAIUser(aiId);
+
+      const { error } = await supabase.from('reactions').insert([
+        { post_id: target.id, user_id: aiId, emoji, created_at: Date.now() },
+      ]);
+
+      // 入れる直前に人が押すこともある。異常ではないので次の組み合わせへ
+      if (!error) return true;
+      if (!error.message.includes('duplicate')) {
+        console.error('AI reaction failed:', error.message);
+        return false;
+      }
+    }
+  }
+
+  return false;
+}
+
+/** その場で並びを崩す。元の配列は変えない */
+function shuffle<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
 }
 
 /** 同じやり取りの中で、AIが答える回数の上限 */
