@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# 名前だけの見本は共有する（値は入っていない）
+!.env.example
 
 # vercel
 .vercel

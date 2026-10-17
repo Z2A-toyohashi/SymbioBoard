@@ -1,7 +1,7 @@
 {
   "name": "AI Living Lab",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:20-bookworm",
-  "postCreateCommand": "npm install",
+  "postCreateCommand": "npm install && [ -f .env ] || cp .env.example .env",
   "customizations": {
     "vscode": {
       "extensions": [

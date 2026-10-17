@@ -313,6 +313,43 @@ Supabase の SQL Editor で **`schema-all.sql`** を実行する。これだけ�
 
 Actions の画面から `ai-tick` → Run workflow で手動実行できる。動いているかの確認はこれが早い。
 
+## スマホから開発する
+
+2つの入口がある。どちらを使う場合も、セッションは `CLAUDE.md` を最初に読む。
+
+### A. Remote Control（この PC につなぐ）
+
+手元の PC で動いているセッションを、スマホから操作する。
+
+```bash
+claude --rc        # または、起動中のセッションで /remote-control
+```
+
+出た URL（claude.ai/code）をスマホで開けば、そのまま続きができる。
+**PC が起動していてセッションが動いていることが条件。** PC が寝ると切れる。
+手元の `.env` とデータベースをそのまま使うので、動作確認もできる。
+
+### B. クラウドセッション（PC が要らない）
+
+claude.ai/code から、GitHub の `Z2A-toyohashi/SymbioBoard` を選んで始める。
+PC が消えていても動く代わりに、環境は毎回まっさらになる。
+
+- 依存は `npm install` から入る（`.devcontainer` が面倒を見る）
+- `.env` は無い。`.env.example` が名前の見本で、値は入れない限りダミーのまま
+- つまり**データベースを使う動作確認はできない**。型・ビルド・描画までが限界
+
+### 入力の手間を減らす設定
+
+`.claude/settings.json` に、確認系のコマンドとソースの編集を許可してある。
+スマホで毎回「許可」を押すのは現実的ではないため。
+
+- 許可: ビルド・型チェック・lint・`git` の確認系・`app`/`components`/`lib`/`types` の編集
+- 許可しない: `.env` の読み書き、`rm -rf`、`git push --force`、`git reset --hard`
+
+`git commit` と `git push` はその都度確認を出す（意図せず本番に出さないため）。
+
+---
+
 ### 6. 開発サーバー
 
 ```bash
