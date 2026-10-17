@@ -7,6 +7,7 @@ import AIResidents from '@/components/admin/AIResidents';
 import HumanRoster from '@/components/admin/HumanRoster';
 import AIDiagnose from '@/components/admin/AIDiagnose';
 import BoardAdmin from '@/components/admin/BoardAdmin';
+import StampAdmin from '@/components/admin/StampAdmin';
 
 /**
  * 管理のトップ。
@@ -63,6 +64,7 @@ export default function AdminPage() {
         <HumanRoster />
         <AIResidents />
         <BoardAdmin />
+        <StampAdmin />
       </main>
     </div>
   );

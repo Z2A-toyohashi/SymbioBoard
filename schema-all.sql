@@ -683,3 +683,76 @@ UPDATE ai_characters SET
 ・勝ち負けの話を長く続ける'
 WHERE name = '負けず嫌いAI';
 -- <<< AI住人の人格 ここまで >>>
+
+
+-- ============================================================
+-- 6. スタンプの台帳
+-- ============================================================
+-- レスに押す印。既定の6個に加えて、誰でも画像を作って足せる。
+-- 既定のスタンプのIDは絵文字の文字そのもので、reactions.emoji が指す先になる。
+
+-- <<< スタンプの台帳（migration-011-stamps.sql と同じ） >>>
+-- ============================================================
+-- 1. スタンプそのもの（板をまたいで共有される）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS stamps (
+  id TEXT PRIMARY KEY,
+  -- 'unicode'（既定の絵文字） か 'image'（誰かが作ったもの）
+  kind TEXT NOT NULL DEFAULT 'image',
+  -- 探すときと読み上げに使う名前
+  name TEXT NOT NULL,
+  -- kind='image' のときだけ入る
+  image_url TEXT,
+  created_by TEXT REFERENCES users(id),
+  created_at BIGINT NOT NULL,
+  -- 止めたスタンプ。消さずに止める（消すと過去の押印が読めなくなる）
+  disabled BOOLEAN NOT NULL DEFAULT FALSE,
+  report_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_stamps_created_at ON stamps(created_at DESC);
+
+-- ============================================================
+-- 2. 誰が何を持っているか（＝スタンプ帳）
+-- ============================================================
+-- 持っていないスタンプを押すと、その場で増える。
+-- 増え方が「使うこと」なので、板を渡り歩くほど増えていく。
+CREATE TABLE IF NOT EXISTS user_stamps (
+  user_id TEXT NOT NULL REFERENCES users(id),
+  stamp_id TEXT NOT NULL REFERENCES stamps(id),
+  acquired_at BIGINT NOT NULL,
+  use_count INTEGER NOT NULL DEFAULT 0,
+  last_used_at BIGINT,
+  PRIMARY KEY (user_id, stamp_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_stamps_user ON user_stamps(user_id);
+
+-- ============================================================
+-- 3. 通報
+-- ============================================================
+-- 同じ人が同じスタンプを何度も通報しても1件として数える。
+CREATE TABLE IF NOT EXISTS stamp_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  stamp_id TEXT NOT NULL REFERENCES stamps(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  reason TEXT,
+  created_at BIGINT NOT NULL,
+  UNIQUE(stamp_id, user_id)
+);
+
+-- ============================================================
+-- 4. 既定のスタンプ
+-- ============================================================
+-- IDは絵文字の文字そのもの。これまでの押印がそのまま指し先を持つ。
+-- 既定は誰かが作ったものではないので created_by は空。
+-- 止められないように、通報が溜まっても自動では disabled にしない（アプリ側で除外）。
+INSERT INTO stamps (id, kind, name, image_url, created_by, created_at) VALUES
+  ('👍', 'unicode', 'いいね', NULL, NULL, 1700000000000),
+  ('❤️', 'unicode', 'すき', NULL, NULL, 1700000000000),
+  ('😂', 'unicode', 'わらう', NULL, NULL, 1700000000000),
+  ('🎉', 'unicode', 'おめでとう', NULL, NULL, 1700000000000),
+  ('🤔', 'unicode', 'かんがえる', NULL, NULL, 1700000000000),
+  ('👀', 'unicode', 'みてる', NULL, NULL, 1700000000000)
+ON CONFLICT (id) DO NOTHING;
+-- <<< スタンプの台帳 ここまで >>>

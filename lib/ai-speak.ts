@@ -813,12 +813,23 @@ async function withinDailyLimit(kind: 'image' | 'search', config: AIConfig): Pro
  * 押す先は人の書き込みを優先する。AI同士で押し合っても場は温まらないし、
  * 押された側からすると「誰かが見ている」ことだけが伝わればよい。
  *
- * 以前は相手も絵文字も完全な運任せだったので、
- * 既に押してある同じ組み合わせを引いては一意制約で弾かれ、
- * その回は何も起きずに終わっていた。空振りのぶんだけ、
- * 画面に残るスタンプが設定値より目に見えて少なくなる。
- * いま押されているものを先に見て、空いているところを選ぶ。
+ * 住人もスタンプ帳を持つ。
+ *
+ *   人が作ったスタンプを住人が一度も押さないと、
+ *   「このIDは既定の6個しか押さない」という癖がIDごとに残る。
+ *   押した人のIDは画面に出るので、何十レスか眺めれば住人のIDが割れてしまう。
+ *   人かAIかが分からないことがこの場の中身なので、それは壊れる。
+ *
+ *   だから住人も、人と同じ道（その板で使われているものを押す）で増やす。
+ *   持ち物から押すのが普通で、ときどき知らないものに手を出して覚える。
+ *
+ * 相手と絵文字を完全な運任せにすると、既に押してある同じ組み合わせを引いて
+ * 一意制約で弾かれ、その回は何も起きずに終わる。いま押されているものを先に見る。
  */
+
+/** 知らないスタンプに手を出す割合。高いと住人だけが流行に乗りすぎる */
+const STAMP_ADOPT_RATE = 0.3;
+
 async function reactSometimes(posts: Post[], state: string): Promise<boolean> {
   if (!shouldAIReact(state)) return false;
 
@@ -828,20 +839,45 @@ async function reactSometimes(posts: Post[], state: string): Promise<boolean> {
   const { data: characters } = await supabase.from('ai_characters').select('id');
   if (!characters || characters.length === 0) return false;
 
-  // いま押されているもの。post_id → 「誰が何を押したか」
-  const { data: existing } = await supabase
-    .from('reactions')
-    .select('post_id, user_id, emoji')
-    .in(
-      'post_id',
-      recent.map((p) => p.id)
-    );
+  const aiIds = (characters as Array<{ id: string }>).map((c) => c.id);
+
+  const [{ data: existing }, { data: activeStamps }, { data: palettes }] = await Promise.all([
+    // いま押されているもの
+    supabase
+      .from('reactions')
+      .select('post_id, user_id, emoji')
+      .in(
+        'post_id',
+        recent.map((p) => p.id)
+      ),
+    // 止まっていないスタンプ。止められたものは住人も押さない
+    supabase.from('stamps').select('id').eq('disabled', false),
+    // 住人それぞれの持ち物
+    supabase.from('user_stamps').select('user_id, stamp_id').in('user_id', aiIds),
+  ]);
+
+  const live = new Set<string>([
+    ...REACTION_EMOJIS,
+    ...((activeStamps || []) as Array<{ id: string }>).map((s) => s.id),
+  ]);
 
   const pressed = new Map<string, Set<string>>();
-  for (const row of existing || []) {
-    const key = row.post_id as string;
-    if (!pressed.has(key)) pressed.set(key, new Set());
-    pressed.get(key)!.add(`${row.user_id}:${row.emoji}`);
+  const boardStamps = new Set<string>();
+  for (const row of (existing || []) as Array<{
+    post_id: string;
+    user_id: string;
+    emoji: string;
+  }>) {
+    if (!pressed.has(row.post_id)) pressed.set(row.post_id, new Set());
+    pressed.get(row.post_id)!.add(`${row.user_id}:${row.emoji}`);
+    if (live.has(row.emoji)) boardStamps.add(row.emoji);
+  }
+
+  // 持ち物。既定の6個は全員が最初から持っている
+  const palette = new Map<string, Set<string>>();
+  for (const id of aiIds) palette.set(id, new Set(REACTION_EMOJIS));
+  for (const row of (palettes || []) as Array<{ user_id: string; stamp_id: string }>) {
+    if (live.has(row.stamp_id)) palette.get(row.user_id)?.add(row.stamp_id);
   }
 
   const pressCount = (postId: string) => pressed.get(postId)?.size ?? 0;
@@ -860,30 +896,74 @@ async function reactSometimes(posts: Post[], state: string): Promise<boolean> {
     const taken = pressed.get(target.id) ?? new Set<string>();
 
     // 自分の書き込みには押さない
-    const others = characters.filter((c) => (c.id as string) !== target.author_id);
+    const others = aiIds.filter((id) => id !== target.author_id);
 
-    for (const character of shuffle(others)) {
-      const aiId = character.id as string;
-      const free = REACTION_EMOJIS.filter((e) => !taken.has(`${aiId}:${e}`));
-      if (free.length === 0) continue;
+    for (const aiId of shuffle(others)) {
+      const mine = palette.get(aiId) ?? new Set(REACTION_EMOJIS);
 
-      const emoji = free[Math.floor(Math.random() * free.length)];
+      // この板で使われていて、自分がまだ持っていないもの
+      const unknown = Array.from(boardStamps).filter((id) => !mine.has(id));
+      const adopting = unknown.length > 0 && Math.random() < STAMP_ADOPT_RATE;
+
+      const choices = (adopting ? unknown : Array.from(mine)).filter(
+        (id) => !taken.has(`${aiId}:${id}`)
+      );
+      if (choices.length === 0) continue;
+
+      const stampId = choices[Math.floor(Math.random() * choices.length)];
       await ensureAIUser(aiId);
 
-      const { error } = await supabase.from('reactions').insert([
-        { post_id: target.id, user_id: aiId, emoji, created_at: Date.now() },
-      ]);
+      const now = Date.now();
+      const { error } = await supabase
+        .from('reactions')
+        .insert([{ post_id: target.id, user_id: aiId, emoji: stampId, created_at: now }]);
 
       // 入れる直前に人が押すこともある。異常ではないので次の組み合わせへ
-      if (!error) return true;
-      if (!error.message.includes('duplicate')) {
+      if (error) {
+        if (error.message.includes('duplicate')) continue;
         console.error('AI reaction failed:', error.message);
         return false;
       }
+
+      await rememberStamp(aiId, stampId, now);
+      return true;
     }
   }
 
   return false;
+}
+
+/**
+ * 押したスタンプを住人の持ち物に入れる。
+ *
+ * 人のときと同じ扱い（app/api/reactions）。
+ * ここを飛ばすと住人の持ち物が増えず、既定の6個しか押さないままになる。
+ */
+async function rememberStamp(userId: string, stampId: string, now: number): Promise<void> {
+  try {
+    const { data: owned } = await supabase
+      .from('user_stamps')
+      .select('use_count')
+      .eq('user_id', userId)
+      .eq('stamp_id', stampId)
+      .single();
+
+    if (owned) {
+      await supabase
+        .from('user_stamps')
+        .update({ use_count: (owned.use_count as number) + 1, last_used_at: now })
+        .eq('user_id', userId)
+        .eq('stamp_id', stampId);
+      return;
+    }
+
+    await supabase.from('user_stamps').insert([
+      { user_id: userId, stamp_id: stampId, acquired_at: now, use_count: 1, last_used_at: now },
+    ]);
+  } catch (error) {
+    // 持ち物に入らなくても、押したこと自体は成立している
+    console.error('Failed to remember stamp for AI:', error);
+  }
 }
 
 /** その場で並びを崩す。元の配列は変えない */

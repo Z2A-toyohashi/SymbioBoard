@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import type { Board, Post } from '@/types';
 import { ensureUserId } from '@/lib/user';
@@ -12,6 +12,7 @@ import CoexistenceMeter from '@/components/CoexistenceMeter';
 import BoardRail from '@/components/BoardRail';
 import BoardTabs from '@/components/BoardTabs';
 import Doodle, { DoodleScatter } from '@/components/Doodle';
+import { useStampBook } from '@/lib/use-stamps';
 
 export default function BoardPage() {
   const params = useParams<{ boardId: string }>();
@@ -24,6 +25,20 @@ export default function BoardPage() {
   const [replyToPost, setReplyToPost] = useState<Post | undefined>();
   const [loading, setLoading] = useState(true);
 
+  /**
+   * 押された跡。
+   *
+   * 板ぶんをまとめて取って、レスへ配る。
+   * 以前はレス1件ごとに取りにいっていたので、24レスの板では24回の
+   * 問い合わせが走り、更新のたびに全部やり直していた。
+   */
+  const [reactions, setReactions] = useState<
+    Record<string, Record<string, { count: number; users: string[] }>>
+  >({});
+
+  // スタンプの台帳と、自分の持ち物。板をまたいで共通なので画面に1回だけ読む
+  const { stamps, owned, reload: reloadStamps } = useStampBook(userId || undefined);
+
   const fetchPosts = useCallback(async () => {
     try {
       const res = await fetch(`/api/posts?boardId=${encodeURIComponent(boardId)}`);
@@ -33,6 +48,58 @@ export default function BoardPage() {
       console.error('Failed to fetch posts:', error);
     }
   }, [boardId]);
+
+  const fetchReactions = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/reactions?boardId=${encodeURIComponent(boardId)}`);
+      const data = await res.json();
+      if (data.byPost) {
+        // 押した人のIDだけを並べ替えずにそのまま受ける（押された順）
+        const next: Record<string, Record<string, { count: number; users: string[] }>> = {};
+        for (const [postId, grouped] of Object.entries(
+          data.byPost as Record<string, Record<string, { count: number; users: { id: string }[] }>>
+        )) {
+          next[postId] = {};
+          for (const [stampId, info] of Object.entries(grouped)) {
+            next[postId][stampId] = { count: info.count, users: info.users.map((u) => u.id) };
+          }
+        }
+        setReactions(next);
+      }
+    } catch (error) {
+      console.error('Failed to fetch reactions:', error);
+    }
+  }, [boardId]);
+
+  /**
+   * スタンプを押す／取り消す。
+   *
+   * 押すと、そのスタンプが自分の持ち物に入る（サーバ側で記録される）。
+   * 持っていなかったものを押したときのために、台帳も読み直す。
+   */
+  const toggleReaction = async (postId: string, stampId: string) => {
+    if (!userId) return;
+    try {
+      const res = await fetch('/api/reactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, userId, emoji: stampId }),
+      });
+      if (!res.ok) return;
+      await Promise.all([fetchReactions(), reloadStamps()]);
+    } catch (error) {
+      console.error('Failed to toggle reaction:', error);
+    }
+  };
+
+  /** この板で使われているスタンプ。選ぶところの「増やす入口」に出す */
+  const boardStampIds = useMemo(() => {
+    const seen = new Set<string>();
+    for (const grouped of Object.values(reactions)) {
+      for (const stampId of Object.keys(grouped)) seen.add(stampId);
+    }
+    return Array.from(seen);
+  }, [reactions]);
 
   useEffect(() => {
     const init = async () => {
@@ -51,7 +118,7 @@ export default function BoardPage() {
         setBoard(data.board);
       }
 
-      await fetchPosts();
+      await Promise.all([fetchPosts(), fetchReactions()]);
       setLoading(false);
     };
 
@@ -74,11 +141,15 @@ export default function BoardPage() {
       subscription.unsubscribe();
       subscription = subscribeToPosts();
       fetchPosts();
+      fetchReactions();
     };
 
     // タブに戻ってきた時は取り直すだけでよい。接続が生きていれば張り直しは無駄になる。
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') fetchPosts();
+      if (document.visibilityState === 'visible') {
+        fetchPosts();
+        fetchReactions();
+      }
     };
 
     window.addEventListener('pageshow', handlePageShow);
@@ -98,11 +169,12 @@ export default function BoardPage() {
           { event: '*', schema: 'public', table: 'posts', filter: `board_id=eq.${boardId}` },
           () => {
             fetchPosts();
+            fetchReactions();
           }
         )
         .subscribe();
     }
-  }, [boardId, fetchPosts]);
+  }, [boardId, fetchPosts, fetchReactions]);
 
   /**
    * 住人の様子をうかがう。
@@ -195,7 +267,7 @@ export default function BoardPage() {
       const data = await res.json();
       // この板に書き込まれたなら取り直す。購読が生きていれば二重になるが、
       // 同じ内容で上書きされるだけなので画面は乱れない。
-      if (data.postedHere) await fetchPosts();
+      if (data.postedHere) await Promise.all([fetchPosts(), fetchReactions()]);
     } catch (error) {
       console.error('AI check failed:', error);
     }
@@ -285,7 +357,12 @@ export default function BoardPage() {
                     onReply={handleReply}
                     onJumpTo={jumpTo}
                     currentUserId={userId}
-                    onReactionUpdate={fetchPosts}
+                    reactions={reactions[post.id] || {}}
+                    onToggleReaction={toggleReaction}
+                    stamps={stamps}
+                    owned={owned}
+                    boardStampIds={boardStampIds}
+                    onStampsChanged={reloadStamps}
                     onDelete={async (postId) => {
                       try {
                         await fetch(`/api/posts?id=${postId}`, { method: 'DELETE' });

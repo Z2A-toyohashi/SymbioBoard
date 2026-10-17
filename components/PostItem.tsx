@@ -4,6 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import type { Post } from '@/types';
 import { formatTime } from '@/lib/utils';
 import { displayId } from '@/lib/short-id';
+import { isDefaultStamp, type Stamp } from '@/lib/stamps';
+import type { OwnedStamp } from '@/lib/use-stamps';
+import StampView from './StampView';
+import StampPicker from './StampPicker';
 
 /**
  * レス1件。
@@ -22,6 +26,9 @@ import { displayId } from '@/lib/short-id';
  * 操作（返信・スタンプ・削除）は文字のままにしてある。
  * 枠や色の付いたボタンを並べると、書き込みより操作のほうが目立つ。
  * 押せる範囲だけを44pxまで広げて、指で外さないようにする。
+ *
+ * 押された跡は板ごとにまとめて取って、上から配られる。
+ * レスごとに取りにいくと、24レスの板で24回の問い合わせが走っていた。
  */
 interface PostItemProps {
   post: Post;
@@ -33,18 +40,21 @@ interface PostItemProps {
   onJumpTo?: (number: number) => void;
   currentUserId?: string;
   onDelete?: (postId: string) => void;
-  onReactionUpdate?: () => void;
+  /** この書き込みに押されたスタンプ */
+  reactions: Record<string, { count: number; users: string[] }>;
+  onToggleReaction: (postId: string, stampId: string) => void;
+  /** スタンプ台帳と自分の持ち物 */
+  stamps: Record<string, Stamp>;
+  owned: Record<string, OwnedStamp>;
+  /** この板で使われているスタンプ。選ぶところの「増やす入口」に出す */
+  boardStampIds: string[];
+  onStampsChanged: () => void;
 }
-
-type ReactionMap = Record<string, { count: number; userReacted: boolean; users: string[] }>;
 
 /** 長押しと見なすまでの時間。短いと、押すつもりが開いてしまう */
 const PEEK_HOLD_MS = 420;
 /** マウスを載せてから出るまで。すぐ出ると、通り過ぎただけで開く */
 const PEEK_HOVER_MS = 320;
-
-// 住人側（lib/ai-manager.ts の REACTION_EMOJIS）と同じ並びにしておく
-const EMOJIS = ['👍', '❤️', '😂', '🎉', '🤔', '👀'];
 
 export default function PostItem({
   post,
@@ -54,10 +64,15 @@ export default function PostItem({
   onJumpTo,
   currentUserId,
   onDelete,
-  onReactionUpdate,
+  reactions,
+  onToggleReaction,
+  stamps,
+  owned,
+  boardStampIds,
+  onStampsChanged,
 }: PostItemProps) {
   const [showPicker, setShowPicker] = useState(false);
-  const [reactions, setReactions] = useState<ReactionMap>({});
+  const [notice, setNotice] = useState('');
 
   /**
    * 誰が押したかを覗く。
@@ -66,7 +81,7 @@ export default function PostItem({
    * pinned は「押さえて開いた」状態で、外を触るまで閉じない。
    * マウスを重ねただけのときは、離れれば閉じる。
    */
-  const [peek, setPeek] = useState<{ emoji: string; pinned: boolean } | null>(null);
+  const [peek, setPeek] = useState<{ stampId: string; pinned: boolean } | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 長押しで開いたあと、指を離した拍子にスタンプが押されるのを止める
   const heldRef = useRef(false);
@@ -78,11 +93,11 @@ export default function PostItem({
     }
   };
 
-  const startHold = (emoji: string, delay: number, pinned: boolean) => {
+  const startHold = (stampId: string, delay: number, pinned: boolean) => {
     cancelHold();
     holdTimer.current = setTimeout(() => {
       if (pinned) heldRef.current = true;
-      setPeek({ emoji, pinned });
+      setPeek({ stampId, pinned });
     }, delay);
   };
 
@@ -98,49 +113,26 @@ export default function PostItem({
     return () => window.removeEventListener('keydown', onKey);
   }, [peek]);
 
-  useEffect(() => {
-    loadReactions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [post.id]);
-
-  const loadReactions = async () => {
-    try {
-      const res = await fetch(`/api/reactions?postId=${post.id}`);
-      const data = await res.json();
-      if (data.reactions) {
-        const next: ReactionMap = {};
-        Object.entries(data.reactions).forEach(([emoji, info]) => {
-          const typed = info as { count: number; users: Array<{ id: string }> };
-          next[emoji] = {
-            count: typed.count,
-            userReacted: currentUserId ? typed.users.some((u) => u.id === currentUserId) : false,
-            // 押した人のID。板に出ているIDと同じ4桁で、人かAIかは分からないまま
-            users: typed.users.map((u) => u.id),
-          };
-        });
-        setReactions(next);
-      }
-    } catch (error) {
-      console.error('Failed to load reactions:', error);
-    }
-  };
-
-  const handleReaction = async (emoji: string) => {
+  /** 作られたスタンプを運営に知らせる */
+  const report = async (stampId: string) => {
     if (!currentUserId) return;
+    if (!confirm('このスタンプを運営に知らせますか？ 何件か集まると自動で止まります。')) return;
+
     try {
-      const res = await fetch('/api/reactions', {
+      const res = await fetch('/api/stamps/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postId: post.id, userId: currentUserId, emoji }),
+        body: JSON.stringify({ stampId, userId: currentUserId }),
       });
-      if (res.ok) {
-        await loadReactions();
-        onReactionUpdate?.();
-      }
-    } catch (error) {
-      console.error('Failed to toggle reaction:', error);
+      const data = (await res.json().catch(() => ({}))) as { hidden?: boolean };
+      setPeek(null);
+      setNotice(data.hidden ? 'このスタンプを止めました。ありがとう' : '知らせました');
+      setTimeout(() => setNotice(''), 4000);
+      onStampsChanged();
+    } catch {
+      setNotice('知らせられませんでした');
+      setTimeout(() => setNotice(''), 4000);
     }
-    setShowPicker(false);
   };
 
   const isOwn = post.author_id === currentUserId;
@@ -168,12 +160,15 @@ export default function PostItem({
       />
 
       <div className="flex flex-wrap items-center gap-2.5 px-3 text-[12px] sm:px-4">
-        {Object.entries(reactions).map(([emoji, info]) => {
+        {Object.entries(reactions).map(([stampId, info]) => {
           const who = info.users.map((id) => `ID:${displayId(id)}`).join('、');
-          const open = peek?.emoji === emoji;
+          const open = peek?.stampId === stampId;
+          const mine = currentUserId ? info.users.includes(currentUserId) : false;
+          const stamp = stamps[stampId];
+          const label = stamp?.name || stampId;
 
           return (
-            <span key={emoji} className="relative">
+            <span key={stampId} className="relative">
               <button
                 onClick={(e) => {
                   // 長押しで開いた直後は、押した扱いにしない
@@ -182,39 +177,37 @@ export default function PostItem({
                     e.preventDefault();
                     return;
                   }
-                  handleReaction(emoji);
+                  onToggleReaction(post.id, stampId);
                 }}
                 onPointerDown={(e) => {
-                  if (e.pointerType !== 'mouse') startHold(emoji, PEEK_HOLD_MS, true);
+                  if (e.pointerType !== 'mouse') startHold(stampId, PEEK_HOLD_MS, true);
                 }}
                 onPointerUp={cancelHold}
                 onPointerCancel={cancelHold}
-                onMouseEnter={() => startHold(emoji, PEEK_HOVER_MS, false)}
+                onMouseEnter={() => startHold(stampId, PEEK_HOVER_MS, false)}
                 onMouseLeave={() => {
                   cancelHold();
-                  setPeek((prev) => (prev && prev.emoji === emoji && !prev.pinned ? null : prev));
+                  setPeek((prev) => (prev && prev.stampId === stampId && !prev.pinned ? null : prev));
                 }}
                 onContextMenu={(e) => {
                   // パソコンでは右クリックでも開く（長押しの代わり）
                   e.preventDefault();
                   cancelHold();
                   heldRef.current = false;
-                  setPeek({ emoji, pinned: true });
+                  setPeek({ stampId, pinned: true });
                 }}
                 className="mz-mono my-1.5 inline-flex min-h-[32px] items-center gap-1 rounded-full px-2.5 tabular-nums transition-transform active:scale-95"
-                aria-pressed={info.userReacted}
-                aria-label={`${emoji} ${info.count}件${
-                  info.userReacted ? '（自分も押した）' : ''
-                }。押した人 ${who}`}
-                title={`${emoji} を押した人: ${who}`}
+                aria-pressed={mine}
+                aria-label={`${label} ${info.count}件${mine ? '（自分も押した）' : ''}。押した人 ${who}`}
+                title={`${label} を押した人: ${who}`}
                 style={{
                   border: '1.5px solid',
-                  borderColor: info.userReacted ? 'var(--mz-accent)' : 'var(--mz-line-soft)',
-                  background: info.userReacted ? 'var(--mz-accent-weak)' : 'var(--mz-surface)',
-                  color: info.userReacted ? 'var(--mz-accent)' : 'var(--mz-ink-sub)',
+                  borderColor: mine ? 'var(--mz-accent)' : 'var(--mz-line-soft)',
+                  background: mine ? 'var(--mz-accent-weak)' : 'var(--mz-surface)',
+                  color: mine ? 'var(--mz-accent)' : 'var(--mz-ink-sub)',
                 }}
               >
-                <span className="text-[14px]">{emoji}</span>
+                <StampView id={stampId} stamp={stamp} size={17} />
                 {info.count}
               </button>
 
@@ -227,30 +220,41 @@ export default function PostItem({
                   <div
                     className="mz-card animate-fade-in absolute bottom-full left-0 z-30 mb-2 w-max max-w-[16rem] p-2.5"
                     role="dialog"
-                    aria-label={`${emoji} を押した人`}
+                    aria-label={`${label} を押した人`}
                   >
-                    <p className="mz-ink-faint mb-1.5 text-[10px] leading-none">
-                      {emoji} を押した人
+                    <p className="mz-ink-faint mb-1.5 flex items-center gap-1 text-[10px] leading-none">
+                      <StampView id={stampId} stamp={stamp} size={14} />
+                      {label} を押した人
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {info.users.map((id, i) => {
-                        const mine = id === currentUserId;
+                        const you = id === currentUserId;
                         return (
                           <span
                             key={`${id}-${i}`}
                             className="mz-chip mz-mono text-[11px]"
                             style={
-                              mine
+                              you
                                 ? { background: 'var(--mz-accent)', color: 'var(--mz-accent-ink)' }
                                 : { borderColor: 'var(--mz-line-soft)' }
                             }
                           >
                             {displayId(id)}
-                            {mine && ' あなた'}
+                            {you && ' あなた'}
                           </span>
                         );
                       })}
                     </div>
+
+                    {/* 作られたスタンプには、見た人が止められる口を必ず持たせる */}
+                    {!isDefaultStamp(stampId) && currentUserId && (
+                      <button
+                        onClick={() => report(stampId)}
+                        className="mz-ink-faint mt-2 text-[10px] underline"
+                      >
+                        このスタンプを知らせる
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -258,41 +262,13 @@ export default function PostItem({
           );
         })}
 
-        <div className="relative">
-          <button
-            onClick={() => setShowPicker((v) => !v)}
-            className="mz-tap mz-ink-faint"
-            aria-expanded={showPicker}
-            aria-label="スタンプを押す"
-          >
-            スタンプ
-          </button>
-          {showPicker && (
-            <>
-              <div className="fixed inset-0 z-20" onClick={() => setShowPicker(false)} />
-              <div className="mz-card animate-fade-in absolute bottom-full left-0 z-30 mb-1.5 w-max p-1.5">
-                <div className="flex gap-0.5">
-                  {EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => handleReaction(emoji)}
-                      className="rounded-full px-2 py-1.5 text-[20px] transition-transform hover:scale-125 active:scale-95"
-                      aria-label={`${emoji} を押す`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-                {/* 長押しは見ただけでは分からないので、ここで一度だけ伝える */}
-                <p className="mz-ink-faint mt-1 px-1 pb-0.5 text-[10px] leading-tight">
-                  押された数を長押し（パソコンは重ねるか右クリック）すると、
-                  <br />
-                  誰が押したかが出ます
-                </p>
-              </div>
-            </>
-          )}
-        </div>
+        <button
+          onClick={() => setShowPicker(true)}
+          className="mz-tap mz-ink-faint"
+          aria-label="スタンプを押す"
+        >
+          スタンプ
+        </button>
 
         <button onClick={() => onReply(post.id)} className="mz-tap mz-ink-sub font-bold">
           返信
@@ -310,6 +286,27 @@ export default function PostItem({
           </button>
         )}
       </div>
+
+      {notice && (
+        <p className="mz-accent animate-fade-in px-3 pb-2 text-[11px] sm:px-4" role="status">
+          {notice}
+        </p>
+      )}
+
+      {showPicker && (
+        <StampPicker
+          stamps={stamps}
+          owned={owned}
+          boardStampIds={boardStampIds}
+          userId={currentUserId}
+          onPick={(stampId) => {
+            onToggleReaction(post.id, stampId);
+            setShowPicker(false);
+          }}
+          onReload={onStampsChanged}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
     </article>
   );
 }

@@ -289,6 +289,7 @@ Supabase の SQL Editor で **`schema-all.sql`** を実行する。これだけ�
 | `migration-008-ai-board-creation.sql` | AIが板を立てられるようにする |
 | `migration-009-board-ai-tuning.sql` | 板ごとにAIの出方を上書きできるようにする |
 | `migration-010-ai-personas.sql` | AI住人ひとりずつに人格を入れる（口調と「しないこと」） |
+| `migration-011-stamps.sql` | スタンプの台帳。画像のスタンプを作れるようにする |
 
 `migration-*.sql`（001系）は古い個別マイグレーション。新規DBには流さない。
 
