@@ -11,6 +11,55 @@ import {
 } from '@/lib/stamps';
 
 /**
+ * 失敗の理由を、呼んだ側に分かる言葉で返す。
+ *
+ * ここは画面から直接叩かれる口で、落ちたときに出るのが「500」だけだと、
+ * 台帳がまだ無いのか、鍵が足りないのか、画像が大きいのかが分からない。
+ * サーバのログは本番では見に行きにくいので、理由は応答にも入れる。
+ *
+ * 42P01 = テーブルが無い。マイグレーションを流していない場合にこれが出る。
+ */
+function failed(where: string, error: unknown) {
+  const detail = error as { message?: string; code?: string } | null;
+  console.error(`Stamp API failed at ${where}:`, error);
+
+  if (detail?.code === '42P01') {
+    return NextResponse.json(
+      {
+        error: 'スタンプの台帳がまだありません。migration-011-stamps.sql を実行してください',
+        where,
+        code: detail.code,
+      },
+      { status: 503 }
+    );
+  }
+
+  return NextResponse.json(
+    {
+      error: `${where}で失敗しました`,
+      details: detail?.message || String(error),
+      code: detail?.code,
+    },
+    { status: 500 }
+  );
+}
+
+/**
+ * 書き手の行を用意する。
+ *
+ * stamps.created_by と user_stamps.user_id は users を参照している。
+ * 画面から来たIDが users に無いと、外部キー違反で作成そのものが落ちる。
+ * 作る前に必ず行を用意しておく（AI住人に対する ensureAIUser と同じ考え）。
+ */
+async function ensureUserRow(userId: string): Promise<void> {
+  const { data } = await supabase.from('users').select('id').eq('id', userId).maybeSingle();
+  if (data) return;
+
+  const now = Date.now();
+  await supabase.from('users').insert([{ id: userId, created_at: now, last_seen: now }]);
+}
+
+/**
  * スタンプの台帳。
  *
  * スタンプは板をまたいで共有される「物」で、持ち物は人ごと。
@@ -35,7 +84,7 @@ export async function GET(request: NextRequest) {
         : Promise.resolve({ data: [] as unknown[] }),
     ]);
 
-    if (error) throw error;
+    if (error) return failed('スタンプ一覧の取得', error);
 
     return NextResponse.json({
       stamps: (stamps || []) as Stamp[],
@@ -47,8 +96,7 @@ export async function GET(request: NextRequest) {
       }>,
     });
   } catch (error) {
-    console.error('Failed to list stamps:', error);
-    return NextResponse.json({ error: 'Failed to list stamps' }, { status: 500 });
+    return failed('スタンプ一覧の取得', error);
   }
 }
 
@@ -93,11 +141,14 @@ export async function POST(request: NextRequest) {
 
     // 1日に作れる数。日付ではなく24時間で見る（日付だと日またぎで倍作れる）
     const since = Date.now() - 86400000;
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from('stamps')
       .select('id', { count: 'exact', head: true })
       .eq('created_by', userId)
       .gte('created_at', since);
+
+    // 台帳が無い場合はここで分かる。先に知らせる
+    if (countError) return failed('台帳の確認', countError);
 
     if ((count || 0) >= STAMP_DAILY_LIMIT) {
       return NextResponse.json(
@@ -115,16 +166,17 @@ export async function POST(request: NextRequest) {
       .from('uploads')
       .upload(path, buffer, { contentType: image.type, cacheControl: '31536000', upsert: false });
 
-    if (uploadError) {
-      console.error('Stamp upload failed:', uploadError);
-      return NextResponse.json({ error: '画像を置けませんでした' }, { status: 500 });
-    }
+    if (uploadError) return failed('画像の保存', uploadError);
 
     const {
       data: { publicUrl },
     } = supabase.storage.from('uploads').getPublicUrl(path);
 
     const now = Date.now();
+
+    // 外部キーの向き先を先に用意する
+    await ensureUserRow(userId);
+
     const { error: insertError } = await supabase.from('stamps').insert([
       {
         id,
@@ -136,7 +188,11 @@ export async function POST(request: NextRequest) {
       },
     ]);
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      // 行が作れなかったなら、置いた画像も残さない
+      await supabase.storage.from('uploads').remove([path]);
+      return failed('スタンプの登録', insertError);
+    }
 
     // 作った本人は、押す前から持っている
     await supabase
@@ -147,8 +203,7 @@ export async function POST(request: NextRequest) {
       stamp: { id, kind: 'image', name, image_url: publicUrl, created_by: userId, created_at: now, disabled: false },
     });
   } catch (error) {
-    console.error('Failed to create stamp:', error);
-    return NextResponse.json({ error: '作れませんでした' }, { status: 500 });
+    return failed('スタンプの作成', error);
   }
 }
 
@@ -170,11 +225,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     const { error } = await supabase.from('stamps').update({ disabled }).eq('id', stampId);
-    if (error) throw error;
+    if (error) return failed('スタンプの更新', error);
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Failed to update stamp:', error);
-    return NextResponse.json({ error: 'Failed to update stamp' }, { status: 500 });
+    return failed('スタンプの更新', error);
   }
 }

@@ -283,10 +283,14 @@ function CreateForm({
       body.append('userId', userId);
 
       const res = await fetch('/api/stamps', { method: 'POST', body });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        details?: string;
+      };
 
       if (!res.ok) {
-        setError(data.error || '作れませんでした');
+        // 「500」だけだと何が起きたのか分からないので、理由も並べて出す
+        setError([data.error, data.details].filter(Boolean).join(' / ') || '作れませんでした');
         setBusy(false);
         return;
       }

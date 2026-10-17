@@ -8,6 +8,7 @@ import { isDefaultStamp, type Stamp } from '@/lib/stamps';
 import type { OwnedStamp } from '@/lib/use-stamps';
 import StampView from './StampView';
 import StampPicker from './StampPicker';
+import RichText from './RichText';
 
 /**
  * レス1件。
@@ -373,7 +374,7 @@ function ResBody({
         )}
         {post.content && (
           <span className="mz-ink text-[15px] leading-[1.85] break-words whitespace-pre-wrap">
-            {post.content}
+            <RichText text={post.content} />
           </span>
         )}
         {post.media_url && (

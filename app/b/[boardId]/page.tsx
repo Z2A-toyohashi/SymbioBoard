@@ -12,6 +12,7 @@ import CoexistenceMeter from '@/components/CoexistenceMeter';
 import BoardRail from '@/components/BoardRail';
 import BoardTabs from '@/components/BoardTabs';
 import Doodle, { DoodleScatter } from '@/components/Doodle';
+import RichText from '@/components/RichText';
 import { useStampBook } from '@/lib/use-stamps';
 
 export default function BoardPage() {
@@ -311,7 +312,7 @@ export default function BoardPage() {
                 <span className="mz-ink mt-0.5 shrink-0" aria-hidden>
                   <Doodle name="bubble" size={16} fill="var(--mz-sun)" />
                 </span>
-                {board.description}
+                <RichText text={board.description} />
               </p>
             )}
 
