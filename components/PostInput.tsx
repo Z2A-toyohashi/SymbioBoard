@@ -166,8 +166,15 @@ export default function PostInput({
           <div className="hidden lg:block" />
           <div className="lg:max-w-[760px]">
             {replyTo && replyToPost && (
-              <div className="mz-border animate-fade-in flex items-center gap-2 border-b py-2 text-[12px]">
-                <span className="mz-chip mz-chip-accent shrink-0">返信先</span>
+              <div
+                className="animate-fade-in mt-2.5 flex items-center gap-2 px-3 py-2 text-[12px]"
+                style={{
+                  background: 'var(--mz-surface-sub)',
+                  border: 'var(--mz-border-w) solid var(--mz-line)',
+                  borderRadius: 'var(--mz-radius-pill)',
+                }}
+              >
+                <span className="mz-chip mz-chip-sun shrink-0 py-0">返信先</span>
                 <span className="mz-mono mz-ink-sub shrink-0">
                   ID:{displayId(replyToPost.author_id)}
                 </span>
@@ -176,7 +183,7 @@ export default function PostInput({
                   <button
                     onClick={onCancel}
                     className="mz-btn-icon shrink-0"
-                    style={{ width: 36, height: 36, fontSize: 14 }}
+                    style={{ width: 32, height: 32, fontSize: 13, boxShadow: 'none' }}
                     aria-label="返信をやめる"
                   >
                     ✕
@@ -191,12 +198,20 @@ export default function PostInput({
                 <img
                   src={imagePreview}
                   alt="送る画像"
-                  className="mz-border max-h-28 border"
-                  style={{ borderRadius: 'var(--mz-radius-sm)' }}
+                  className="max-h-28"
+                  style={{
+                    border: 'var(--mz-border-w) solid var(--mz-line)',
+                    borderRadius: 'var(--mz-radius-sm)',
+                  }}
                 />
                 <button
                   onClick={clearImage}
-                  className="absolute top-1 right-1 h-7 w-7 rounded-full bg-black/70 text-xs text-white"
+                  className="absolute -top-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full text-xs"
+                  style={{
+                    background: 'var(--mz-ink)',
+                    color: 'var(--mz-paper)',
+                    border: 'var(--mz-border-w) solid var(--mz-line)',
+                  }}
                   aria-label="画像を外す"
                 >
                   ✕
@@ -239,7 +254,7 @@ export default function PostInput({
                 placeholder={replyTo ? '返信を書く' : placeholder}
                 rows={expanded ? 3 : 1}
                 aria-label={replyTo ? '返信' : '書き込み'}
-                className="mz-field min-w-0 flex-1 resize-none"
+                className={`mz-field min-w-0 flex-1 resize-none ${expanded ? '' : 'mz-field-pill'}`}
               />
 
               <button

@@ -11,6 +11,7 @@ import SiteHeader from '@/components/SiteHeader';
 import CoexistenceMeter from '@/components/CoexistenceMeter';
 import BoardRail from '@/components/BoardRail';
 import BoardTabs from '@/components/BoardTabs';
+import Doodle, { DoodleScatter } from '@/components/Doodle';
 
 export default function BoardPage() {
   const params = useParams<{ boardId: string }>();
@@ -234,13 +235,16 @@ export default function BoardPage() {
             <BoardTabs currentBoardId={boardId} />
 
             {board?.description && (
-              <p className="mz-ink-sub mz-border border-b px-4 py-3 text-[13px] leading-relaxed sm:border-b-0 sm:px-0 sm:pt-5 sm:pb-3">
+              <p className="mz-ink-sub flex items-start gap-2 px-4 py-3 text-[13px] leading-relaxed sm:px-0 sm:pt-5 sm:pb-3">
+                <span className="mz-ink mt-0.5 shrink-0" aria-hidden>
+                  <Doodle name="bubble" size={16} fill="var(--mz-sun)" />
+                </span>
                 {board.description}
               </p>
             )}
 
             {loading ? (
-              <div className="mz-card mt-0 overflow-hidden rounded-none border-x-0 sm:mt-4 sm:rounded-[var(--mz-radius)] sm:border-x">
+              <div className="mz-card-flat mt-0 overflow-hidden rounded-none border-x-0 sm:mt-2 sm:rounded-[var(--mz-radius)] sm:border-x">
                 {/* 来るレスと同じ形の影。描き終わりに画面が跳ねないようにする */}
                 {Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="mz-border border-b px-3 py-3.5 last:border-b-0 sm:px-4">
@@ -255,19 +259,22 @@ export default function BoardPage() {
                 ))}
               </div>
             ) : timeline.length === 0 ? (
-              <div className="mz-card mx-4 mt-8 px-6 py-16 text-center sm:mx-0">
-                <p className="mz-display mz-ink mb-2 text-[19px]">まだ誰も書いていません</p>
-                <p className="mz-ink-sub text-[13px] leading-relaxed">
+              <div className="mz-card relative mx-4 mt-6 overflow-hidden px-6 py-16 text-center sm:mx-0">
+                <DoodleScatter className="mz-ink absolute inset-0" />
+                <p className="mz-display mz-ink relative mb-2 text-[20px] font-black">
+                  まだ誰も書いていません
+                </p>
+                <p className="mz-ink-sub relative text-[13px] leading-relaxed">
                   最初の一行を置くと、この板が動きはじめます
                 </p>
-                <p className="mz-ink-faint mt-4 text-[12px] leading-relaxed">
+                <p className="mz-ink-faint relative mt-4 text-[12px] leading-relaxed">
                   下の欄に書くと、しばらくして誰かが応えます。
                   <br />
                   返ってくるまで待たなくても、閉じて戻ってきて構いません
                 </p>
               </div>
             ) : (
-              <div className="mz-card mt-0 overflow-hidden rounded-none border-x-0 sm:mt-4 sm:rounded-[var(--mz-radius)] sm:border-x">
+              <div className="mz-card-flat mt-0 overflow-hidden rounded-none border-x-0 sm:mt-2 sm:rounded-[var(--mz-radius)] sm:border-x">
                 {/* 新しいものが上。返信もこの列に混ざる */}
                 {timeline.map((post) => (
                   <PostItem

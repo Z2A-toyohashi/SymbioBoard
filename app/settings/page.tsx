@@ -91,7 +91,13 @@ export default function SettingsPage() {
             この場に名前はありません。書き込みの横に出る4桁のIDだけが、
             同じ人かどうかの手がかりになります。
           </p>
-          <div className="mz-mono mz-ink mz-surface-sub mz-border inline-block rounded-[var(--mz-radius-sm)] border px-3.5 py-2 text-lg">
+          <div
+            className="mz-mono mz-ink mz-surface-sub inline-block px-4 py-2 text-lg"
+            style={{
+              border: 'var(--mz-border-w) solid var(--mz-line)',
+              borderRadius: 'var(--mz-radius-pill)',
+            }}
+          >
             ID:{displayId(userId)}
           </div>
         </section>
@@ -106,8 +112,13 @@ export default function SettingsPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <code
-              className="mz-mono mz-border mz-surface-sub rounded-[var(--mz-radius-sm)] border px-3.5 py-2.5 text-[15px] tracking-widest"
-              style={{ filter: codeVisible ? 'none' : 'blur(5px)' }}
+              className="mz-mono mz-surface-sub px-4 py-2.5 text-[15px] tracking-widest"
+              style={{
+                border: 'var(--mz-border-w) solid var(--mz-line)',
+                borderRadius: 'var(--mz-radius-pill)',
+                // 肩越しに見られても読めないように、押すまでぼかしておく
+                filter: codeVisible ? 'none' : 'blur(5px)',
+              }}
             >
               {code || '発行中…'}
             </code>

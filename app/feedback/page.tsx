@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { ensureUserId } from '@/lib/user';
 import SiteHeader from '@/components/SiteHeader';
+import Doodle from '@/components/Doodle';
 
 /**
  * ご意見。
@@ -60,7 +61,10 @@ export default function FeedbackPage() {
 
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-5 pb-24 sm:px-6">
         <section className="mz-card p-4 sm:p-5">
-          <h2 className="mz-ink mb-1 text-[15px] font-bold">使ってみて気づいたこと</h2>
+          <h2 className="mz-display mz-ink mb-1 flex items-center gap-2 text-[17px] font-black">
+            <Doodle name="bubble" size={22} fill="var(--mz-sun)" />
+            使ってみて気づいたこと
+          </h2>
           <p className="mz-ink-sub mb-3 text-[12px] leading-relaxed">
             読むのは作っている側だけです。板には出ません。
             名前は要りません（IDだけが一緒に届きます）。
@@ -100,7 +104,13 @@ export default function FeedbackPage() {
           </div>
         </section>
 
-        <section className="mz-surface-sub mz-border rounded-[var(--mz-radius)] border p-4 sm:p-5">
+        <section
+          className="mz-surface-sub p-4 sm:p-5"
+          style={{
+            border: '2px dotted var(--mz-line-soft)',
+            borderRadius: 'var(--mz-radius)',
+          }}
+        >
           <h3 className="mz-ink-sub mb-2 text-[12px] font-bold tracking-[0.12em]">
             答えにくければ、このあたり
           </h3>

@@ -27,7 +27,7 @@ export default function BoardRail({ currentBoardId }: { currentBoardId?: string 
     <aside className="hidden lg:block">
       <div className="sticky top-32 pt-5">
         <div className="mb-2 flex items-baseline px-1">
-          <h2 className="mz-ink-sub text-[11px] font-bold tracking-[0.12em]">板</h2>
+          <h2 className="mz-display mz-ink-sub text-[11px] font-bold tracking-[0.12em]">板</h2>
           <Link href="/" className="mz-accent ml-auto text-[11px] hover:underline">
             一覧
           </Link>
@@ -50,17 +50,24 @@ export default function BoardRail({ currentBoardId }: { currentBoardId?: string 
                   key={board.id}
                   href={`/b/${board.id}`}
                   aria-current={active ? 'page' : undefined}
-                  className="flex items-baseline gap-2 rounded-[var(--mz-radius-sm)] px-2.5 py-2.5 transition-colors"
+                  className="flex items-baseline gap-2 px-3 py-2.5 transition-colors"
                   style={
                     active
-                      ? { background: 'var(--mz-accent-weak)', color: 'var(--mz-accent)' }
-                      : { color: 'var(--mz-ink)' }
+                      ? {
+                          background: 'var(--mz-ink)',
+                          color: 'var(--mz-paper)',
+                          borderRadius: 'var(--mz-radius-pill)',
+                        }
+                      : { color: 'var(--mz-ink)', borderRadius: 'var(--mz-radius-pill)' }
                   }
                 >
                   <span className={`truncate text-[13px] ${active ? 'font-bold' : ''}`}>
                     {board.title}
                   </span>
-                  <span className="mz-mono mz-ink-faint ml-auto shrink-0 text-[11px] tabular-nums">
+                  <span
+                    className="mz-mono ml-auto shrink-0 text-[11px] tabular-nums"
+                    style={{ color: active ? 'var(--mz-paper)' : 'var(--mz-ink-faint)' }}
+                  >
                     {board.post_count}
                   </span>
                 </Link>
@@ -72,7 +79,7 @@ export default function BoardRail({ currentBoardId }: { currentBoardId?: string 
           )}
         </nav>
 
-        <Link href="/" className="mz-btn mz-btn-sm mz-btn-quiet mt-3 w-full">
+        <Link href="/" className="mz-btn mz-btn-sm mz-btn-quiet mt-3.5 w-full">
           板を立てる
         </Link>
       </div>

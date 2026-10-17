@@ -34,7 +34,7 @@ export default function BoardTabs({ currentBoardId }: { currentBoardId?: string 
 
   return (
     <nav
-      className="mz-border mz-scroll-x flex gap-1.5 border-b px-3 py-2 lg:hidden"
+      className="mz-border mz-scroll-x flex gap-2 border-b border-dotted px-3 py-2.5 lg:hidden"
       aria-label="板を移る"
     >
       {boards.map((board) => {
@@ -45,16 +45,15 @@ export default function BoardTabs({ currentBoardId }: { currentBoardId?: string 
             href={`/b/${board.id}`}
             ref={active ? activeRef : undefined}
             aria-current={active ? 'page' : undefined}
-            className="mz-chip shrink-0 px-3 py-2 text-[12px]"
+            className="mz-chip mz-display shrink-0 px-3.5 py-2 text-[12px]"
             style={
               active
                 ? {
-                    background: 'var(--mz-accent)',
-                    borderColor: 'transparent',
-                    color: 'var(--mz-accent-ink)',
-                    fontWeight: 700,
+                    background: 'var(--mz-ink)',
+                    color: 'var(--mz-paper)',
+                    boxShadow: 'var(--mz-pop-sm)',
                   }
-                : undefined
+                : { borderColor: 'var(--mz-line-soft)', color: 'var(--mz-ink-sub)' }
             }
           >
             {board.title}
@@ -62,8 +61,12 @@ export default function BoardTabs({ currentBoardId }: { currentBoardId?: string 
         );
       })}
 
-      <Link href="/" className="mz-chip shrink-0 px-3 py-2 text-[12px]">
-        板一覧
+      <Link
+        href="/"
+        className="mz-chip shrink-0 px-3.5 py-2 text-[12px]"
+        style={{ borderColor: 'var(--mz-line-soft)', color: 'var(--mz-ink-sub)' }}
+      >
+        板一覧 →
       </Link>
     </nav>
   );

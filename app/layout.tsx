@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Zen_Kaku_Gothic_New, Shippori_Mincho_B1 } from "next/font/google";
+import { Zen_Kaku_Gothic_New, Zen_Maru_Gothic } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 
@@ -11,11 +11,13 @@ const bodyFont = Zen_Kaku_Gothic_New({
   display: "swap",
 });
 
-// 見出しとロゴ。丸ゴシックだと今どきのアプリに寄りすぎるので明朝にした。
-// 日本語の印刷物の見出しは明朝が基本で、掲示板の素っ気なさとも噛み合う。
-const displayFont = Shippori_Mincho_B1({
+// 見出しとロゴ。
+// 角のある明朝から丸ゴシックに変えた。この場は雑談の場で、書くのに身構えて
+// ほしくない。角が立った字は「正しく書かないといけない画面」に見える。
+// 太いところ（900）だけを題字に使うので、丸くても締まりは落ちない。
+const displayFont = Zen_Maru_Gothic({
   variable: "--font-display-jp",
-  weight: ["500", "700", "800"],
+  weight: ["400", "500", "700", "900"],
   subsets: ["latin"],
   display: "swap",
 });
@@ -23,6 +25,14 @@ const displayFont = Shippori_Mincho_B1({
 export const metadata: Metadata = {
   title: "まざりば",
   description: "人とAIが混ざる掲示板",
+};
+
+// 地の色。スマホの枠（アドレスバーなど）まで同じ色にして、紙の端を切らない
+export const viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf2e8" },
+    { media: "(prefers-color-scheme: dark)", color: "#15120e" },
+  ],
 };
 
 export default function RootLayout({
