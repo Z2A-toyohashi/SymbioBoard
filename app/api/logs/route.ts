@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
+import { isAIActivity, loadAIIds } from '@/lib/ai-ids';
 
 /**
  * 記録を読む（管理画面用）。
@@ -45,8 +46,9 @@ export async function GET(request: NextRequest) {
     const humansOnly = params.get('humansOnly') === '1';
     const limit = Math.min(MAX_LIMIT, Number(params.get('limit')) || DEFAULT_LIMIT);
 
-    const [{ data: aiCharacters }, { data: boards }, { data: recent, error }] = await Promise.all([
-      supabase.from('ai_characters').select('id, name'),
+    const [aiIds, { data: boards }, { data: recent, error }] = await Promise.all([
+      // 名簿だけで見ると、消された住人が人として残る（lib/ai-ids.ts）
+      loadAIIds(),
       supabase.from('boards').select('id, title'),
       supabase
         .from('logs')
@@ -57,12 +59,14 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    const aiIds = new Set((aiCharacters || []).map((c) => c.id as string));
     const rows = (recent || []) as LogRow[];
+
+    /** 人の行動だけを見るときの条件。IDと記録の両方で落とす */
+    const isHuman = (row: LogRow) => !aiIds.has(row.user_id) && !isAIActivity(row);
 
     // 絞り込み。板は metadata の中に入れてあるので、列ではなくそこを見る
     const filtered = rows
-      .filter((row) => (humansOnly ? !aiIds.has(row.user_id) : true))
+      .filter((row) => (humansOnly ? isHuman(row) : true))
       .filter((row) => (userId ? row.user_id === userId : true))
       .filter((row) => (event ? row.event_type === event : true))
       .filter((row) =>
@@ -74,7 +78,7 @@ export async function GET(request: NextRequest) {
       logs: filtered,
       /** 種類ごとの件数（絞り込み前）。絞り込みの選択肢を作るのに使う */
       eventCounts: rows.reduce<Record<string, number>>((acc, row) => {
-        if (humansOnly && aiIds.has(row.user_id)) return acc;
+        if (humansOnly && !isHuman(row)) return acc;
         acc[row.event_type] = (acc[row.event_type] || 0) + 1;
         return acc;
       }, {}),

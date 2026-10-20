@@ -12,6 +12,7 @@ import { wakefulness } from './ai-hours';
 import { isWithinBoardGrace } from './board-grace';
 import { planLength } from './ai-length';
 import { sampleKaomoji, usesKaomoji } from './kaomoji';
+import { loadAIIds } from './ai-ids';
 
 /**
  * 板ごとの自立発言。
@@ -449,7 +450,16 @@ async function speakOnClaimedBoard(
   // users にはAIも入っているので、人数を数えるときは必ず差し引く。
   // 差し引かないとAIがAIを呼んで増え続ける。
   let { data: characters } = await supabase.from('ai_characters').select('*').order('id');
-  const aiIds = new Set((characters || []).map((c) => c.id as string));
+
+  /**
+   * 差し引く相手は、名簿（ai_characters）に居る住人だけでは足りない。
+   *
+   * 管理画面から住人を消すと名簿の行だけが消えて、users の行は残る。
+   * その残りを人として数えると、消した数だけ「人が増えた」ことになり、
+   * 増えた人数に合わせて住人がまた増える。AIがAIを呼ぶ形になる。
+   * 書いたものから見る（lib/ai-ids.ts）。
+   */
+  const aiIds = await loadAIIds();
 
   const { data: users } = await supabase
     .from('users')

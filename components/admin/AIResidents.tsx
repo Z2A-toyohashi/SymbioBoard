@@ -67,8 +67,23 @@ export default function AIResidents() {
     load();
   };
 
+  /**
+   * 退去させる。
+   *
+   * 名簿（ai_characters）から行を消すだけで、過去の発言も users の行も残る。
+   * 残った側を人として数えてしまう不具合があり、消された住人が
+   * 訪問者の一覧に「訪問11回・書いた3件」で並んでいた。
+   * いまは書いたものからAIだと分かるようにしてある（lib/ai-ids.ts）ので、
+   * 消しても人には混ざらない。確認の文にもその旨を書いておく。
+   */
   const remove = async (id: string, name: string) => {
-    if (!confirm(`${name} を退去させますか？ 過去の発言は残りますが、名前が出なくなります。`))
+    if (
+      !confirm(
+        `${name}（ID:${id}）を退去させますか？\n\n` +
+          `過去の発言は残り、板では今までどおり読めます（名前は出ません）。\n` +
+          `このIDは人として数えられることはなく、別の人に配られることもありません。`
+      )
+    )
       return;
     await fetch(`/api/ai-characters?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
     load();

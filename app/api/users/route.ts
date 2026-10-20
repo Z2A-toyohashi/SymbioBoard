@@ -1,26 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
+import { loadAIIds } from '@/lib/ai-ids';
 
 /**
  * 参加者の集計。
  *
  * users テーブルには人もAIも入っている。投稿には必ず書き手のIDが要るので、
  * AIが書き込むときもそのIDを users に登録しているため。
- * そのまま数えるとAIを人間として数えてしまうので、ai_characters にあるIDを
- * 必ず差し引く。
+ * そのまま数えるとAIを人間として数えてしまうので、AIのIDを必ず差し引く。
+ *
+ * 差し引く相手は ai_characters（名簿）だけでは足りない。
+ * 管理画面から住人を消すと名簿の行だけが消え、その住人が人になってしまう。
+ * 実際に消された住人が人として数えられていた（lib/ai-ids.ts）。
  */
 export async function GET() {
   try {
-    const [{ data: allUsers, error: usersError }, { data: aiCharacters, error: aiError }] =
+    const [{ data: allUsers, error: usersError }, { data: aiCharacters }, aiIds] =
       await Promise.all([
         supabase.from('users').select('id, created_at, last_seen'),
         supabase.from('ai_characters').select('id'),
+        loadAIIds(),
       ]);
 
     if (usersError) throw usersError;
-    if (aiError) throw aiError;
 
-    const aiIds = new Set((aiCharacters || []).map((c) => c.id as string));
     const humans = (allUsers || []).filter((u) => !aiIds.has(u.id as string));
 
     const activeSince = Date.now() - 3600000;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
 import { VISIT_GAP_MS, countVisits } from '@/lib/visits';
+import { isAIActivity, loadAIIds } from '@/lib/ai-ids';
 
 /**
  * 訪問者（人だけ）の一覧。
@@ -68,25 +69,34 @@ export async function GET(request: NextRequest) {
     const days = Math.max(1, Math.min(365, Number(params.get('days')) || DEFAULT_DAYS));
     const since = Date.now() - days * 86400000;
 
-    const [{ data: allUsers, error: usersError }, { data: aiCharacters }, { data: logs }] =
-      await Promise.all([
-        supabase.from('users').select('id, created_at, last_seen'),
-        supabase.from('ai_characters').select('id'),
-        supabase
-          .from('logs')
-          .select('event_type, user_id, metadata, created_at')
-          .gte('created_at', since)
-          .order('created_at', { ascending: false })
-          .limit(MAX_LOGS),
-      ]);
+    const [{ data: allUsers, error: usersError }, aiIds, { data: logs }] = await Promise.all([
+      supabase.from('users').select('id, created_at, last_seen'),
+      // 名簿だけで見ると、消された住人が人として並ぶ（lib/ai-ids.ts）
+      loadAIIds(),
+      supabase
+        .from('logs')
+        .select('event_type, user_id, metadata, created_at')
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(MAX_LOGS),
+    ]);
 
     if (usersError) throw usersError;
 
     // users にはAIも入っている。IDを引いて必ず差し引く
-    const aiIds = new Set((aiCharacters || []).map((c) => c.id as string));
     const humans = (allUsers || []).filter((u) => !aiIds.has(u.id as string));
 
-    const rows = ((logs || []) as LogRow[]).filter((row) => !aiIds.has(row.user_id));
+    /**
+     * 記録のほうでも、AIの行動を落とす。
+     *
+     * IDの判定をすり抜けた行が残っていても、ここで止まる。
+     * 実際、古い post / reply の記録には metadata に author_type: 'ai' が
+     * 入っているものがあり（昔はAIの書き込みも /api/posts を通っていた）、
+     * それが「板を開いていないのに書いた回数だけある人」に見えていた。
+     */
+    const rows = ((logs || []) as LogRow[]).filter(
+      (row) => !aiIds.has(row.user_id) && !isAIActivity(row)
+    );
 
     // ひとりずつの行動を、古い順に並べ直す（訪問の区切りに要る）
     const byUser = new Map<string, LogRow[]>();
