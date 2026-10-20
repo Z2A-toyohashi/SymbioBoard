@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { BoardSummary } from '@/types';
 import { useFavorites } from '@/lib/favorites';
+import FavoriteToggle from './FavoriteToggle';
 
 /**
  * 板の袖。
@@ -18,7 +19,13 @@ import { useFavorites } from '@/lib/favorites';
  *   入れる・外す操作は板の中（BoardTabs）と一覧（/）に置いてある。
  *   ここは渡り歩くための列なので、操作は混ぜない。
  */
-export default function BoardRail({ currentBoardId }: { currentBoardId?: string }) {
+export default function BoardRail({
+  currentBoardId,
+  userId,
+}: {
+  currentBoardId?: string;
+  userId?: string;
+}) {
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const { favorites } = useFavorites();
@@ -74,6 +81,22 @@ export default function BoardRail({ currentBoardId }: { currentBoardId?: string 
   return (
     <aside className="hidden lg:block">
       <div className="sticky top-32 pt-5">
+        {/*
+          いま見ている板の出し入れ。
+          広い画面では板を移る列（BoardTabs）が出ないので、
+          ここに無いと一覧へ戻らないとお気に入りに入れられない。
+        */}
+        {currentBoardId && (
+          <div className="mb-4 px-1">
+            <FavoriteToggle
+              boardId={currentBoardId}
+              boardTitle={boards.find((b) => b.id === currentBoardId)?.title}
+              userId={userId}
+              variant="chip"
+            />
+          </div>
+        )}
+
         {favored.length > 0 && (
           <>
             <div className="mb-2 flex items-baseline px-1">

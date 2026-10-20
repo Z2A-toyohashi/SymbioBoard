@@ -200,16 +200,24 @@ function BoardAITuning({
     board.ai_probability_scale != null ? String(board.ai_probability_scale) : ''
   );
 
-  const aiRatio = board.post_count > 0 ? board.ai_post_count / board.post_count : 0;
+  /**
+   * 内訳。
+   * 板の側では件数が来ないことがあるが（書き込みが少ないうちは「？」）、
+   * 管理画面は admin=1 で読むので必ず入っている。
+   * 型の上では null を取りうるので、ここで 0 に落としておく。
+   */
+  const humanPosts = board.human_post_count ?? 0;
+  const aiPosts = board.ai_post_count ?? 0;
+  const aiRatio = board.post_count > 0 ? aiPosts / board.post_count : 0;
 
   const num = (v: string, factor = 1) => (v.trim() === '' ? null : Number(v) * factor);
 
   return (
     <div className="mz-surface-sub px-3 py-3 text-[12px]">
       <p className="mz-ink-sub mb-2 leading-relaxed">
-        いまこの板は 人{board.human_post_count} / AI{board.ai_post_count}（AI
+        いまこの板は 人{humanPosts} / AI{aiPosts}（AI
         {Math.round(aiRatio * 100)}%・共存度
-        {coexistenceRate(board.human_post_count, board.ai_post_count)}%）。
+        {coexistenceRate(humanPosts, aiPosts)}%）。
         空欄にすると場の設定に従います。
       </p>
 

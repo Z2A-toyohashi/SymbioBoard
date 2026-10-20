@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { BoardSummary } from '@/types';
 import { useFavorites } from '@/lib/favorites';
-import { track } from '@/lib/activity';
+import FavoriteToggle from './FavoriteToggle';
 
 /**
  * 板の横列（狭い画面だけ）。
@@ -33,7 +33,8 @@ export default function BoardTabs({
 }) {
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const activeRef = useRef<HTMLAnchorElement>(null);
-  const { favorites, isFavorite, toggle, ready } = useFavorites();
+  // 並びに使うだけ。出し入れは FavoriteToggle が持つ
+  const { favorites, isFavorite } = useFavorites();
 
   useEffect(() => {
     fetch('/api/boards')
@@ -58,34 +59,21 @@ export default function BoardTabs({
 
   if (boards.length <= 1 && !currentBoardId) return null;
 
-  const favored = currentBoardId ? isFavorite(currentBoardId) : false;
+  const currentTitle = boards.find((b) => b.id === currentBoardId)?.title;
 
   return (
     <nav
       className="mz-border mz-scroll-x flex gap-2 border-b border-dotted px-3 py-2.5 lg:hidden"
       aria-label="板を移る"
     >
-      {/* いま居る板をお気に入りに入れる／外す */}
-      {currentBoardId && ready && (
-        <button
-          onClick={() => {
-            toggle(currentBoardId);
-            track(favored ? 'favorite_remove' : 'favorite_add', {
-              userId,
-              boardId: currentBoardId,
-            });
-          }}
-          className="mz-chip shrink-0 px-3.5 py-2 text-[12px]"
-          aria-pressed={favored}
-          aria-label={favored ? 'この板をお気に入りから外す' : 'この板をお気に入りに入れる'}
-          style={
-            favored
-              ? { background: 'var(--mz-sun)', color: '#17140f', borderColor: 'var(--mz-line)' }
-              : { borderColor: 'var(--mz-line-soft)', color: 'var(--mz-ink-sub)' }
-          }
-        >
-          {favored ? '★ お気に入り' : '☆ お気に入り'}
-        </button>
+      {/* いま居る板をお気に入りに入れる／外す。列の先頭に置く */}
+      {currentBoardId && (
+        <FavoriteToggle
+          boardId={currentBoardId}
+          boardTitle={currentTitle}
+          userId={userId}
+          variant="chip"
+        />
       )}
 
       {ordered.map((board) => {

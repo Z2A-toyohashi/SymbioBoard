@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
+import { canRevealCoexistence } from '@/lib/coexistence';
 import type { Post } from '@/types';
 
 /**
@@ -16,9 +17,12 @@ import type { Post } from '@/types';
  * 「どれが人でどれがAIか分からない」のはこのアプリの中身そのもので、
  * 画面に出さないことと通信に乗せないことは、同じ一つの約束の両面になる。
  *
- * 共存度（人とAIがどれだけ釣り合っているか）は数字としてなら出してよいので、
- * 件数だけをここで数えて返す。「10件のうち3件はAIだが、どれかは分からない」
- * という状態が、この場の正しい見え方。
+ * 共存度（人とAIがどれだけ釣り合っているか）は数字としてなら出してよいが、
+ * 板が小さいうちは件数からも正体が割れる。
+ * 「自分の1件を引けば、残りはAI」が成り立ってしまうため。
+ * 出していいかどうかは lib/coexistence.ts が決め、出せないうちは
+ * counts を null で返す（画面では「？」になる）。
+ * 隠すと決めたものは最初から送らない。送ってから隠しても、覗けば分かる。
  *
  * 管理画面だけは author_type が要る（どの住人が何を書いたかを追うため）。
  * admin=1 のときだけ付けて返す。
@@ -29,6 +33,8 @@ export async function GET(request: NextRequest) {
     const params = new URL(request.url).searchParams;
     const boardId = params.get('boardId');
     const isAdmin = params.get('admin') === '1';
+    // 内訳を出していいかは「自分以外の人が何件書いたか」で決まる
+    const userId = params.get('userId');
 
     let query = supabase.from('posts').select('*');
     if (boardId) {
@@ -41,6 +47,12 @@ export async function GET(request: NextRequest) {
 
     const rows = (data || []) as Post[];
     const aiCount = rows.filter((p) => p.author_type === 'ai').length;
+    const humanCount = rows.length - aiCount;
+    const othersHumanCount = rows.filter(
+      (p) => p.author_type !== 'ai' && p.author_id !== userId
+    ).length;
+
+    const revealed = isAdmin || canRevealCoexistence(othersHumanCount, aiCount);
 
     return NextResponse.json({
       posts: isAdmin
@@ -51,11 +63,12 @@ export async function GET(request: NextRequest) {
             delete copy.author_type;
             return copy;
           }),
-      counts: { human: rows.length - aiCount, ai: aiCount },
+      counts: revealed ? { human: humanCount, ai: aiCount } : null,
+      revealed,
     });
   } catch (error) {
     console.error('Failed to fetch posts:', error);
-    return NextResponse.json({ posts: [], counts: { human: 0, ai: 0 } }, { status: 500 });
+    return NextResponse.json({ posts: [], counts: null, revealed: false }, { status: 500 });
   }
 }
 

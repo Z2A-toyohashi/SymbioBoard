@@ -1,8 +1,6 @@
 import OpenAI from 'openai';
-import type { Post } from '@/types';
 import { supabase } from './supabase-client';
-import { buildResidentPrompt } from './prompt';
-import { generateAIResponseWithGPT } from './gpt';
+import { boardGraceMs } from './board-grace';
 import type { AIConfig } from './ai-speak';
 
 /**
@@ -21,7 +19,16 @@ import type { AIConfig } from './ai-speak';
  *      ＝ 誰も来ていない場所で勝手に増やさない
  *   5. 確率（既定5%）に当たった
  *
- * 立てたら必ず最初の一行を置く。空の板だけ残ると、壊れているように見える。
+ * 最初の一行は、**ここでは書かない。**
+ *
+ *   以前は立てたその場で書いていた。そうすると開設と同じ時刻に1件目があり、
+ *   しかも立てた人と書き手が同じIDなので、そのIDが住人だと確定していた。
+ *   人は板を立ててから書くまでに間があるし、立てただけで放っておくこともある。
+ *
+ *   なので、ここでは板だけ作って、次に見にいく時刻を少し先に置く。
+ *   一行目は、間が明けたあとに立てた本人が書く
+ *   （lib/ai-speak.ts の openingCharacter）。
+ *   空の板を空のまま放置はしない。そこだけは確率も密度も飛ばしてある。
  */
 
 export interface BoardCreation {
@@ -117,8 +124,25 @@ export async function maybeCreateBoard(config: AIConfig): Promise<BoardCreation 
     },
   ]);
 
-  // 立てたら最初の一行を置く。空の板だけ残すと壊れて見える
-  await writeOpeningPost(boardId, idea, character, config);
+  /**
+   * 次にこの板を見にいく時刻を、間の明けたあとに置く。
+   *
+   * 置かないと、次の点検（最短1分後）で一行目が入ってしまい、
+   * 「開設直後に1件目」という形が結局そのまま出る。
+   * lib/ai-speak.ts 側でも板の開設時刻を見て止めているので、
+   * これは無駄な点検を減らすためのもの。
+   *
+   * board_ai_state が無いDB（migration-004 未適用）では何も起きない。
+   * その場合も開設時刻の判定だけは効く。
+   */
+  const dueAt = now + boardGraceMs(boardId);
+  const { error: stateError } = await supabase
+    .from('board_ai_state')
+    .upsert({ board_id: boardId, next_due_at: dueAt, lease_until: 0 }, { onConflict: 'board_id' });
+
+  if (stateError) {
+    console.error('board_ai_state not set for the new board:', stateError.message);
+  }
 
   return {
     boardId,
@@ -174,72 +198,4 @@ async function inventBoard(
     console.error('Board idea generation failed:', error);
     return null;
   }
-}
-
-/** 立てた本人が最初の一行を置く */
-async function writeOpeningPost(
-  boardId: string,
-  board: { title: string; description: string },
-  character: { id: unknown; system_prompt: unknown },
-  config: AIConfig
-): Promise<void> {
-  const systemPrompt = buildResidentPrompt({
-    commonPrompt: config.system_prompt,
-    characterPrompt: character.system_prompt as string,
-    board,
-    posts: [],
-    state: 'SILENCE',
-    isReply: false,
-  });
-
-  const content = await generateAIResponseWithGPT(
-    `${systemPrompt}\n\nこの板はいま、あなたが立てたばかりです。最初の一行を置いてください。` +
-      `説明や挨拶ではなく、あなた自身の話から始めます。`,
-    [],
-    undefined,
-    config.max_response_length,
-    config.gpt_temperature,
-    config.gpt_presence_penalty,
-    config.gpt_frequency_penalty,
-    config.gpt_model
-  );
-
-  if (!content) return;
-
-  const now = Date.now();
-  const aiId = character.id as string;
-
-  // 投稿者として users に行が要る
-  const { data: existing } = await supabase.from('users').select('id').eq('id', aiId).single();
-  if (!existing) {
-    await supabase.from('users').insert([{ id: aiId, created_at: now, last_seen: now }]);
-  }
-
-  const post: Post = {
-    id: `ai-${now}-${Math.random().toString(36).slice(2, 8)}`,
-    content,
-    type: 'text',
-    created_at: now,
-    thread_id: null,
-    author_type: 'ai',
-    author_id: aiId,
-    media_url: null,
-    board_id: boardId,
-  };
-
-  const { error } = await supabase.from('posts').insert([post]);
-  if (error) {
-    console.error('Opening post failed:', error.message);
-    return;
-  }
-
-  await supabase.from('logs').insert([
-    {
-      event_type: 'ai_intervention',
-      user_id: aiId,
-      post_id: post.id,
-      metadata: { state: 'SILENCE', content, board_id: boardId, is_opening: true },
-      created_at: now,
-    },
-  ]);
 }

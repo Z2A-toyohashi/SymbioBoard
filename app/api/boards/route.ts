@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
 import { displayId } from '@/lib/short-id';
+import { canRevealCoexistence } from '@/lib/coexistence';
+import { boardGraceMs } from '@/lib/board-grace';
 import type { BoardSummary, Participant } from '@/types';
 
 /**
@@ -32,6 +34,15 @@ export async function GET(request: NextRequest) {
      * ※ 管理画面には認証が無い（既知の弱点）。公開する前に鍵を付けること。
      */
     const isAdmin = params.get('admin') === '1';
+
+    /**
+     * 内訳（人◯件 : AI◯件）を出していいかは板ごとに決める。
+     *
+     * 立ったばかりの板で内訳を出すと、自分の書き込みを引くだけで
+     * 残りがAIだと分かる。判定は lib/coexistence.ts、
+     * 出せないうちは件数を null で返す（画面では「？」）。
+     */
+    const userId = params.get('userId');
 
     const boardQuery = supabase.from('boards').select('*').order('created_at', { ascending: true });
     if (!includeArchived) boardQuery.eq('archived', false);
@@ -71,13 +82,17 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.post_count - a.post_count);
 
       const aiPostCount = boardPosts.filter((p) => p.author_type === 'ai').length;
+      const othersHumanCount = boardPosts.filter(
+        (p) => p.author_type !== 'ai' && p.author_id !== userId
+      ).length;
+      const revealed = isAdmin || canRevealCoexistence(othersHumanCount, aiPostCount);
 
       return {
         ...board,
         thread_count: boardPosts.filter((p) => !p.thread_id).length,
         post_count: boardPosts.length,
-        human_post_count: boardPosts.length - aiPostCount,
-        ai_post_count: aiPostCount,
+        human_post_count: revealed ? boardPosts.length - aiPostCount : null,
+        ai_post_count: revealed ? aiPostCount : null,
         last_post_at: boardPosts.length
           ? Math.max(...boardPosts.map((p) => p.created_at as number))
           : null,
@@ -107,7 +122,9 @@ export async function POST(request: NextRequest) {
     }
 
     const trimmed = String(title).trim().slice(0, 40);
-    const id = `b${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+    // 開設時刻は下の board_ai_state でも使うので、一度だけ取る
+    const now = Date.now();
+    const id = `b${now.toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
 
     const { data, error } = await supabase
       .from('boards')
@@ -116,7 +133,7 @@ export async function POST(request: NextRequest) {
           id,
           title: trimmed,
           description: description ? String(description).trim().slice(0, 120) : null,
-          created_at: Date.now(),
+          created_at: now,
           created_by: userId || null,
           is_default: false,
         },
@@ -125,6 +142,29 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    /**
+     * 立てた直後は、住人が来ないようにする。
+     *
+     * 板を立てて最初の一行を書いた数秒後に返事が来ると、
+     * その相手は人ではありえない（人は、できたばかりの板を
+     * 数秒で見つけて書き込んだりしない）。それだけで分かってしまう。
+     *
+     * 次に見にいく時刻を、間（ま）の明けたあとに置く。
+     * 間の長さは板ごとに違う（lib/board-grace.ts）。
+     * 揃っていると「開設の何分後に誰かが来る板」という形が印になる。
+     *
+     * board_ai_state が無いDB（migration-004 未適用）では何も起きないが、
+     * lib/ai-speak.ts 側でも板の開設時刻を見て止めている。
+     */
+    const dueAt = now + boardGraceMs(id);
+    const { error: stateError } = await supabase
+      .from('board_ai_state')
+      .upsert({ board_id: id, next_due_at: dueAt, lease_until: 0 }, { onConflict: 'board_id' });
+
+    if (stateError) {
+      console.error('board_ai_state not set for the new board:', stateError.message);
+    }
 
     return NextResponse.json({ board: data });
   } catch (error) {

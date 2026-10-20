@@ -18,9 +18,15 @@ export interface Board {
 export interface BoardSummary extends Board {
   thread_count: number;
   post_count: number;
-  /** 書き込みの内訳。どれがAIかは出さないが、何件かは出す */
-  human_post_count: number;
-  ai_post_count: number;
+  /**
+   * 書き込みの内訳。どれがAIかは出さないが、何件かは出す。
+   *
+   * 立ったばかりの板では null（画面では「？」）。
+   * 件数が少ないうちは、自分のぶんを引けば残りがAIだと分かってしまう。
+   * 判定は lib/coexistence.ts。
+   */
+  human_post_count: number | null;
+  ai_post_count: number | null;
   last_post_at: number | null;
   participants: Participant[];
 }

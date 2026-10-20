@@ -4,6 +4,7 @@ import type { Post } from '@/types';
 import { SPACE_STATE_LABEL } from '@/types';
 import { detectSpaceState } from '@/lib/ai-logic';
 import { coexistenceRate } from '@/lib/utils';
+import { COEXISTENCE_HIDDEN_HINT } from '@/lib/coexistence';
 
 /**
  * 共存度。
@@ -19,6 +20,10 @@ import { coexistenceRate } from '@/lib/utils';
  *   「どれがAIか」が届いていたということで、通信を覗けば分かる状態だった。
  *   いまは /api/posts が件数だけを返し、印は落ちている。
  *
+ * 書き込みが少ないうちは、その件数さえ出さない（「？」になる）。
+ *   「人1 : AI1」と出ていて、1件が自分のものなら、残りはAIだと確定する。
+ *   板が小さいほど、内訳は正体そのものになる（lib/coexistence.ts）。
+ *
  * 計器は輪郭を太くして、画面の中で一番はっきりした物にしてある。
  * この数字がこの場の体温で、見に来る理由そのものなので、
  * 読み取りに手間がかからないほうがいい。
@@ -30,8 +35,14 @@ import { coexistenceRate } from '@/lib/utils';
 interface CoexistenceMeterProps {
   /** 場の空気の判定に使う。人かAIかの印は入っていない */
   posts: Post[];
-  humanCount: number;
-  aiCount: number;
+  /**
+   * 件数。まだ出せない板では null が来る。
+   *
+   * 書き込みが少ないうちに内訳を出すと、自分のぶんを引くだけで
+   * 残りがAIだと分かってしまう。判定はサーバ側（lib/coexistence.ts）で、
+   * 出せないうちは数字そのものが送られてこない。
+   */
+  counts: { human: number; ai: number } | null;
   /** 見立てのうち「人だと思う」の割合。まだ誰も押していなければ null */
   guessHumanRate?: number | null;
   guessTotal?: number;
@@ -39,12 +50,11 @@ interface CoexistenceMeterProps {
 
 export default function CoexistenceMeter({
   posts,
-  humanCount,
-  aiCount,
+  counts,
   guessHumanRate = null,
   guessTotal = 0,
 }: CoexistenceMeterProps) {
-  const rate = coexistenceRate(humanCount, aiCount);
+  const rate = counts ? coexistenceRate(counts.human, counts.ai) : null;
   const label = SPACE_STATE_LABEL[detectSpaceState(posts)];
 
   return (
@@ -55,7 +65,10 @@ export default function CoexistenceMeter({
          飾りは読ませず、ここで一度だけ読ませる */
       role="img"
       aria-label={
-        `共存度 ${rate}パーセント。人の書き込み${humanCount}件、AIの書き込み${aiCount}件。${label.name}` +
+        (counts && rate !== null
+          ? `共存度 ${rate}パーセント。人の書き込み${counts.human}件、AIの書き込み${counts.ai}件。`
+          : '共存度はまだ出せません。') +
+        label.name +
         (guessHumanRate !== null ? `。見立てでは${guessHumanRate}パーセントが人` : '')
       }
     >
@@ -67,12 +80,15 @@ export default function CoexistenceMeter({
           共存度
         </span>
 
-        <span className="mz-display mz-ink shrink-0 text-[22px] leading-none font-black tabular-nums">
-          {rate}
-          <span className="mz-ink-faint ml-0.5 text-[12px] font-bold">%</span>
+        <span
+          className="mz-display mz-ink shrink-0 text-[22px] leading-none font-black tabular-nums"
+          title={rate === null ? COEXISTENCE_HIDDEN_HINT : undefined}
+        >
+          {rate === null ? '？' : rate}
+          {rate !== null && <span className="mz-ink-faint ml-0.5 text-[12px] font-bold">%</span>}
         </span>
 
-        {/* 太い輪郭の筒に、緑が溜まっていく */}
+        {/* 太い輪郭の筒に、緑が溜まっていく。出せないうちは空のまま */}
         <span
           className="relative h-[14px] min-w-0 flex-1 overflow-hidden"
           style={{
@@ -85,7 +101,7 @@ export default function CoexistenceMeter({
           <span
             className="block h-full"
             style={{
-              width: `${rate}%`,
+              width: `${rate ?? 0}%`,
               background: 'var(--mz-accent)',
               borderRadius: 'var(--mz-radius-pill)',
               transition: 'width 320ms ease-out',
@@ -93,12 +109,24 @@ export default function CoexistenceMeter({
           />
         </span>
 
-        {/* 内訳。どれがAIかは分からないまま、混ざり具合だけが分かる */}
-        <span className="mz-mono mz-ink-sub shrink-0 text-[12px] tabular-nums">
-          人 {humanCount}
-          <span className="mz-ink-faint mx-1">:</span>
-          AI {aiCount}
-        </span>
+        {/*
+          内訳。どれがAIかは分からないまま、混ざり具合だけが分かる。
+          まだ出せない板では、件数そのものが届いていない
+        */}
+        {counts ? (
+          <span className="mz-mono mz-ink-sub shrink-0 text-[12px] tabular-nums">
+            人 {counts.human}
+            <span className="mz-ink-faint mx-1">:</span>
+            AI {counts.ai}
+          </span>
+        ) : (
+          <span
+            className="mz-mono mz-ink-faint shrink-0 text-[11px]"
+            title={COEXISTENCE_HIDDEN_HINT}
+          >
+            まだ出せません
+          </span>
+        )}
 
         {/*
           見立て。誰かが一度でも押していれば出す。

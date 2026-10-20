@@ -38,8 +38,11 @@ export default function BoardPage() {
    * 画面側で数えない。書き込みには人かAIかの印が付いて来ないので、
    * 数えようがない（それがこの場の前提そのもの）。
    * 件数だけを /api/posts が返すので、それをそのまま持つ。
+   *
+   * 書き込みが少ないうちは、その件数さえ来ない（null）。
+   * 「人1 : AI1」で自分の1件を引けば、残りがAIだと分かってしまうため。
    */
-  const [counts, setCounts] = useState({ human: 0, ai: 0 });
+  const [counts, setCounts] = useState<{ human: number; ai: number } | null>(null);
 
   /** 落ちたスレッドを開いているか */
   const [showDropped, setShowDropped] = useState(false);
@@ -72,12 +75,26 @@ export default function BoardPage() {
   // スタンプの台帳と、自分の持ち物。板をまたいで共通なので画面に1回だけ読む
   const { stamps, owned, reload: reloadStamps } = useStampBook(userId || undefined);
 
+  /**
+   * 自分のIDを、取得の中からも読めるように持つ。
+   *
+   * 共存度を出していいかの判定に「自分以外の人が何件書いたか」が要るので、
+   * 取得のたびにIDを渡す。状態（userId）を取得の依存に入れると、
+   * IDが届いた瞬間に購読の張り直しと「板を開いた」の記録が二重に走るので、
+   * 描画に関係しないこちらで持つ。
+   */
+  const userIdRef = useRef('');
+
   const fetchPosts = useCallback(async () => {
     try {
-      const res = await fetch(`/api/posts?boardId=${encodeURIComponent(boardId)}`);
+      const query = new URLSearchParams({ boardId });
+      if (userIdRef.current) query.set('userId', userIdRef.current);
+
+      const res = await fetch(`/api/posts?${query.toString()}`);
       const data = await res.json();
       if (data.posts) setPosts(data.posts);
-      if (data.counts) setCounts(data.counts);
+      // null も意味のある値（まだ出せない）なので、そのまま入れる
+      setCounts(data.counts ?? null);
     } catch (error) {
       console.error('Failed to fetch posts:', error);
     }
@@ -188,6 +205,7 @@ export default function BoardPage() {
   useEffect(() => {
     const init = async () => {
       const id = await ensureUserId();
+      userIdRef.current = id;
       setUserId(id);
 
       await fetch('/api/users', {
@@ -480,8 +498,7 @@ export default function BoardPage() {
       <SiteHeader userId={userId} boardTitle={board?.title || '…'} backHref="/" />
       <CoexistenceMeter
         posts={posts}
-        humanCount={counts.human}
-        aiCount={counts.ai}
+        counts={counts}
         guessHumanRate={guesses.humanRate}
         guessTotal={guesses.total}
       />
@@ -489,7 +506,7 @@ export default function BoardPage() {
       <div className="mx-auto max-w-[1180px] px-0 sm:px-6">
         {/* 広い画面では板の袖を左に。本文は読みやすい幅で止め、余白は右に逃がす */}
         <div className="lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[260px_minmax(0,1fr)]">
-          <BoardRail currentBoardId={boardId} />
+          <BoardRail currentBoardId={boardId} userId={userId} />
 
           <main
             className="lg:max-w-[760px]"

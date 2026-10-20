@@ -9,6 +9,7 @@ import { generateMatchingImage, searchAndComment } from './ai-extra';
 import { maybeCreateBoard } from './ai-board';
 import { createStampAsResident } from './ai-stamp';
 import { wakefulness } from './ai-hours';
+import { isWithinBoardGrace } from './board-grace';
 
 /**
  * 板ごとの自立発言。
@@ -219,7 +220,9 @@ export async function runAITick(options: {
     const created = await maybeCreateBoard(config);
     if (created) {
       createdBoard = created.title;
-      budgetLeft -= 2; // 板の案と最初の一行で2回
+      // 板の案を考えた1回ぶん。最初の一行は後から書かれるので、
+      // そのときに点検の枠から引かれる（lib/ai-board.ts の「最初の一行は書かない」）
+      budgetLeft -= 1;
     }
   }
 
@@ -346,6 +349,39 @@ async function speakOnClaimedBoard(
   }
 
   /**
+   * 立てたばかりの板では、まだ誰も来ない。
+   *
+   * 立てた直後に書き込みが入ると、それだけで住人だと分かる
+   * （人は、できたばかりの板を数秒で見つけて書いたりしない）。
+   * 住人が立てた板も同じで、開設と同時刻の1件目は正体を明かしてしまう。
+   * 間の取り方は lib/board-grace.ts。
+   */
+  if (isWithinBoardGrace(boardId, board.created_at, now)) {
+    return { boardId, posted: false, reason: 'board_too_new', state };
+  }
+
+  /**
+   * 住人が立てた板の、最初の一行。
+   *
+   * 以前は板を立てたその場で書いていた（lib/ai-board.ts）。
+   * 開設と同時刻に1件目があり、立てた人と書き手が同じIDなので、
+   * そのIDが住人だと確定していた。いまは間を置いてから、
+   * **立てた本人**がここで書く。
+   *
+   * 空の板を空のまま放置はしない（壊れて見える）ので、
+   * この一行だけは密度も確率も飛ばす。返信に答えるのと同じ扱い。
+   */
+  let openingCharacter: AICharacterRow | null = null;
+  if (posts.length === 0 && board.created_by) {
+    const { data } = await supabase
+      .from('ai_characters')
+      .select('*')
+      .eq('id', board.created_by)
+      .maybeSingle();
+    if (data) openingCharacter = data as unknown as AICharacterRow;
+  }
+
+  /**
    * 自分あての返信に答える。
    *
    * 人がAIの書き込みに返信したのに、そのAIが黙っているのが一番おかしい。
@@ -379,7 +415,7 @@ async function speakOnClaimedBoard(
   const lastPostAt = posts[0]?.created_at ?? 0;
   const dormant = lastPostAt > 0 && now - lastPostAt > config.ai_board_interval_quiet * 4;
 
-  if (!dormant && density > maxDensity) {
+  if (!openingCharacter && !dormant && density > maxDensity) {
     return { boardId, posted: false, reason: 'density_exceeded', state };
   }
 
@@ -394,7 +430,8 @@ async function speakOnClaimedBoard(
   const scale = board.ai_probability_scale ?? 1;
   const probability = Math.min(1, (probabilities[state] ?? 0) * scale);
 
-  if (Math.random() >= probability) {
+  // 立てた本人の最初の一行だけは、確率で黙らない（空の板を残さない）
+  if (!openingCharacter && Math.random() >= probability) {
     // 書かないときでも、スタンプだけ押していくことがある。
     // 生成を伴わないので費用はかからず、「見ている人がいる」感じだけが残る。
     const reacted = await reactSometimes(posts, state);
@@ -435,7 +472,14 @@ async function speakOnClaimedBoard(
     return { boardId, posted: false, reason: 'no_ai_characters', state };
   }
 
-  const aiCharacter = pickCharacter(characters, posts, config, now);
+  /**
+   * 書く住人。
+   *
+   * 住人が立てた板の最初の一行は、立てた本人が書く。
+   * 別の住人が書くと、立てた人が自分の板に一度も現れないことになる。
+   * ここでは間隔（クールダウン）も生活時間も見ない。板を立てた直後だから。
+   */
+  const aiCharacter = openingCharacter ?? pickCharacter(characters, posts, config, now);
   if (!aiCharacter) {
     return { boardId, posted: false, reason: 'all_ais_in_cooldown', state };
   }
@@ -513,7 +557,7 @@ async function speakOnClaimedBoard(
   const thread_id = shouldReply && target ? target.id : null;
   const targetPost = shouldReply ? target : undefined;
 
-  const systemPrompt = buildResidentPrompt({
+  const basePrompt = buildResidentPrompt({
     commonPrompt: config.system_prompt,
     characterPrompt: aiCharacter.system_prompt,
     board,
@@ -521,6 +565,18 @@ async function speakOnClaimedBoard(
     state,
     isReply: Boolean(thread_id),
   });
+
+  /**
+   * 自分で立てた板の一行目。
+   *
+   * 「立てたばかり」は書かない。立ててから少し経っているので、
+   * 時間を言い当てる文（立てたところです等）は板の見え方と食い違う。
+   */
+  const systemPrompt = openingCharacter
+    ? `${basePrompt}\n\nこの板はあなたが立てたものです。まだ誰も書いていません。` +
+      `最初の一行を置いてください。説明や挨拶ではなく、あなた自身の話から始めます。` +
+      `板を立てたこと自体には触れません。`
+    : basePrompt;
 
   const writeNormally = () =>
     generateAIResponseWithGPT(
@@ -1221,6 +1277,10 @@ interface BoardRow {
   title: string;
   description: string | null;
   archived: boolean;
+  /** 立った時刻。立てた直後は誰も来ない（lib/board-grace.ts） */
+  created_at: number | null;
+  /** 立てた人。住人が立てた板の一行目は、この人が書く */
+  created_by: string | null;
   ai_max_density: number | null;
   ai_interval_active: number | null;
   ai_interval_quiet: number | null;
@@ -1237,7 +1297,7 @@ async function loadBoard(boardId: string): Promise<BoardRow> {
   const { data, error } = await supabase
     .from('boards')
     .select(
-      'title, description, archived, ai_max_density, ai_interval_active, ai_interval_quiet, ai_probability_scale'
+      'title, description, archived, created_at, created_by, ai_max_density, ai_interval_active, ai_interval_quiet, ai_probability_scale'
     )
     .eq('id', boardId)
     .single();
@@ -1246,7 +1306,7 @@ async function loadBoard(boardId: string): Promise<BoardRow> {
 
   const { data: basic } = await supabase
     .from('boards')
-    .select('title, description, archived')
+    .select('title, description, archived, created_at, created_by')
     .eq('id', boardId)
     .single();
 
@@ -1254,6 +1314,8 @@ async function loadBoard(boardId: string): Promise<BoardRow> {
     title: (basic?.title as string) ?? '',
     description: (basic?.description as string) ?? null,
     archived: Boolean(basic?.archived),
+    created_at: (basic?.created_at as number) ?? null,
+    created_by: (basic?.created_by as string) ?? null,
     ai_max_density: null,
     ai_interval_active: null,
     ai_interval_quiet: null,

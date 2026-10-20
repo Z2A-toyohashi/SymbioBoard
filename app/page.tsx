@@ -7,9 +7,11 @@ import { ensureUserId } from '@/lib/user';
 import { coexistenceRate, formatDate, formatTime } from '@/lib/utils';
 import { displayId } from '@/lib/short-id';
 import { useFavorites } from '@/lib/favorites';
+import { COEXISTENCE_HIDDEN_HINT } from '@/lib/coexistence';
 import { track } from '@/lib/activity';
 import SiteHeader from '@/components/SiteHeader';
 import Doodle, { DoodleScatter } from '@/components/Doodle';
+import FavoriteToggle from '@/components/FavoriteToggle';
 
 /**
  * 板一覧。
@@ -45,7 +47,8 @@ export default function BoardListPage() {
   const [tab, setTab] = useState<Tab>('timeline');
   const formRef = useRef<HTMLDivElement>(null);
 
-  const { favorites, isFavorite, toggle, ready } = useFavorites();
+  // 並び替えに使うだけ。出し入れの操作は FavoriteToggle が持つ
+  const { favorites } = useFavorites();
 
   /**
    * 板を立てる欄を開く。
@@ -65,9 +68,31 @@ export default function BoardListPage() {
     });
   };
 
+  const loadBoards = async (id?: string) => {
+    try {
+      const query = new URLSearchParams();
+      const viewer = id ?? userId;
+      if (viewer) query.set('userId', viewer);
+
+      const res = await fetch(`/api/boards?${query.toString()}`);
+      const data = await res.json();
+      setBoards(data.boards || []);
+    } catch (e) {
+      console.error('Failed to load boards:', e);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
-    // IDの発行はサーバに頼むので、自分のIDが分かるのは一呼吸あと。
-    // 板の読み込みはIDを待たないので、先に流す。
+    /**
+     * IDが分かってから板を読む。
+     *
+     * 以前は並行して流していた。いまは共存度を出していいかの判定に
+     * 「自分以外の人が何件書いたか」が要るので、IDを渡さずに読むと
+     * どの板も「？」で返ってきて、IDが届いた直後に数字へ入れ替わる。
+     * 一度出たものが書き換わるより、一拍待つほうがいい。
+     * 既に来たことのある人のIDは手元にあるので、待ちはほぼ無い。
+     */
     ensureUserId().then((id) => {
       setUserId(id);
 
@@ -80,21 +105,12 @@ export default function BoardListPage() {
 
       // 「どこを見たか」の記録。板を開く前の一覧も1件として残す
       track('view_boards', { userId: id });
+
+      loadBoards(id);
     });
-
-    loadBoards();
+    // 最初の1回だけ。loadBoards は毎回作り直されるので依存に入れない
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const loadBoards = async () => {
-    try {
-      const res = await fetch('/api/boards');
-      const data = await res.json();
-      setBoards(data.boards || []);
-    } catch (e) {
-      console.error('Failed to load boards:', e);
-    }
-    setLoading(false);
-  };
 
   /**
    * 板を閉じる。立てた本人にしかボタンが出ないが、
@@ -148,16 +164,6 @@ export default function BoardListPage() {
     await loadBoards();
   };
 
-  const toggleFavorite = (board: BoardSummary) => {
-    const was = isFavorite(board.id);
-    toggle(board.id);
-    track(was ? 'favorite_remove' : 'favorite_add', {
-      userId,
-      boardId: board.id,
-      detail: { title: board.title },
-    });
-  };
-
   /** お気に入りの面。押した順で並べる（自分で決めた順なので動かさない） */
   const favored = useMemo(
     () =>
@@ -191,70 +197,97 @@ export default function BoardListPage() {
   };
 
   const Card = ({ board }: { board: BoardSummary }) => {
-    const rate = coexistenceRate(board.human_post_count, board.ai_post_count);
+    /**
+     * 共存度。
+     * 件数が来ていない板（まだ出せない板）は「？」にする。
+     * 少ない件数で内訳を出すと、自分のぶんを引けば残りがAIだと分かってしまう。
+     */
+    const counted = board.human_post_count !== null && board.ai_post_count !== null;
+    const rate = counted ? coexistenceRate(board.human_post_count!, board.ai_post_count!) : null;
     const isOwn = board.created_by === userId;
-    const favorite = isFavorite(board.id);
 
     return (
       <div className="mz-card overflow-hidden">
-        <Link
-          href={`/b/${board.id}`}
-          className="block px-5 pt-4 pb-3 transition-colors hover:bg-[var(--mz-surface-sub)]"
-        >
-          {/* 1行目：板名と、どれだけ書かれているか */}
-          <div className="flex items-center gap-2">
-            <h3 className="mz-display mz-ink min-w-0 truncate text-[18px] leading-tight font-black tracking-[-0.01em]">
-              {board.title}
-            </h3>
-            {board.is_default && <span className="mz-chip mz-chip-sun shrink-0">既定</span>}
-            <span className="mz-mono mz-ink-sub ml-auto shrink-0 text-[11px] tabular-nums">
-              {board.thread_count}スレ / {board.post_count}レス
-            </span>
-          </div>
+        {/*
+          押す面と、お気に入りの星を横に並べる。
+          星をリンクの中に入れると、押すたびに板へ飛んでしまう（入れ子にできない）
+        */}
+        <div className="flex items-stretch">
+          <Link
+            href={`/b/${board.id}`}
+            className="block min-w-0 flex-1 pt-4 pr-2 pb-3 pl-5 transition-colors hover:bg-[var(--mz-surface-sub)]"
+          >
+            {/* 1行目：板名と、どれだけ書かれているか */}
+            <div className="flex items-center gap-2">
+              <h3 className="mz-display mz-ink min-w-0 truncate text-[18px] leading-tight font-black tracking-[-0.01em]">
+                {board.title}
+              </h3>
+              {board.is_default && <span className="mz-chip mz-chip-sun shrink-0">既定</span>}
+              <span className="mz-mono mz-ink-sub ml-auto shrink-0 text-[11px] tabular-nums">
+                {board.thread_count}スレ / {board.post_count}レス
+              </span>
+            </div>
 
-          {board.description && (
-            <p className="mz-ink-sub mt-1 line-clamp-1 text-[12px]">{board.description}</p>
-          )}
+            {board.description && (
+              <p className="mz-ink-sub mt-1 line-clamp-1 text-[12px]">{board.description}</p>
+            )}
 
-          {/* 2行目：混ざり具合。どの書き込みがAIかは出さない */}
-          <div className="mt-2.5 flex flex-wrap items-center gap-2.5 text-[11px]">
-            {board.post_count === 0 ? (
-              <span className="mz-ink-faint">まだ誰も書いていません</span>
-            ) : (
-              <>
-                <span className="mz-ink-sub shrink-0 font-bold">共存度</span>
-                <span
-                  className="h-[10px] w-20 shrink-0 overflow-hidden"
-                  style={{
-                    background: 'var(--mz-surface)',
-                    border: '1.5px solid var(--mz-line)',
-                    borderRadius: 'var(--mz-radius-pill)',
-                  }}
-                  role="img"
-                  aria-label={`共存度 ${rate}パーセント`}
-                >
+            {/* 2行目：混ざり具合。どの書き込みがAIかは出さない */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-2.5 text-[11px]">
+              {board.post_count === 0 ? (
+                <span className="mz-ink-faint">まだ誰も書いていません</span>
+              ) : (
+                <>
+                  <span className="mz-ink-sub shrink-0 font-bold">共存度</span>
                   <span
-                    className="block h-full"
+                    className="h-[10px] w-20 shrink-0 overflow-hidden"
                     style={{
-                      width: `${rate}%`,
-                      background: 'var(--mz-accent)',
+                      background: 'var(--mz-surface)',
+                      border: '1.5px solid var(--mz-line)',
                       borderRadius: 'var(--mz-radius-pill)',
                     }}
-                  />
+                    role="img"
+                    aria-label={
+                      rate === null ? '共存度はまだ出せません' : `共存度 ${rate}パーセント`
+                    }
+                  >
+                    <span
+                      className="block h-full"
+                      style={{
+                        width: `${rate ?? 0}%`,
+                        background: 'var(--mz-accent)',
+                        borderRadius: 'var(--mz-radius-pill)',
+                      }}
+                    />
+                  </span>
+                  {rate === null ? (
+                    <span className="mz-mono mz-ink-faint shrink-0" title={COEXISTENCE_HIDDEN_HINT}>
+                      ？
+                    </span>
+                  ) : (
+                    <>
+                      <span className="mz-mono mz-ink shrink-0 font-bold tabular-nums">
+                        {rate}%
+                      </span>
+                      <span className="mz-mono mz-ink-faint shrink-0 tabular-nums">
+                        人 {board.human_post_count} : AI {board.ai_post_count}
+                      </span>
+                    </>
+                  )}
+                </>
+              )}
+              {board.last_post_at && (
+                <span className="mz-mono mz-ink-faint ml-auto shrink-0">
+                  {formatTime(board.last_post_at)}
                 </span>
-                <span className="mz-mono mz-ink shrink-0 font-bold tabular-nums">{rate}%</span>
-                <span className="mz-mono mz-ink-faint shrink-0 tabular-nums">
-                  人 {board.human_post_count} : AI {board.ai_post_count}
-                </span>
-              </>
-            )}
-            {board.last_post_at && (
-              <span className="mz-mono mz-ink-faint ml-auto shrink-0">
-                {formatTime(board.last_post_at)}
-              </span>
-            )}
+              )}
+            </div>
+          </Link>
+
+          <div className="flex shrink-0 items-start py-3.5 pr-3.5">
+            <FavoriteToggle boardId={board.id} boardTitle={board.title} userId={userId} />
           </div>
-        </Link>
+        </div>
 
         {/* 3行目：開設の記録と、お気に入りの出し入れ。板を選ぶのに要らないので押せる面から外す */}
         {/*
@@ -267,21 +300,6 @@ export default function BoardListPage() {
           className="mz-ink-faint mz-border flex min-h-[40px] flex-wrap items-center gap-2 border-t px-5 py-1 text-[11px]"
           style={{ background: 'var(--mz-surface-sub)' }}
         >
-          {ready && (
-            <button
-              onClick={() => toggleFavorite(board)}
-              className="mz-tap shrink-0 text-[11px]"
-              style={{ minHeight: 40, color: favorite ? 'var(--mz-ink)' : 'var(--mz-ink-faint)' }}
-              aria-pressed={favorite}
-              aria-label={
-                favorite
-                  ? `${board.title} をお気に入りから外す`
-                  : `${board.title} をお気に入りに入れる`
-              }
-            >
-              {favorite ? '★ お気に入り' : '☆ お気に入り'}
-            </button>
-          )}
           <span className="mz-mono shrink-0">{formatDate(board.created_at)} 開設</span>
           {board.created_by && (
             <span className="mz-mono shrink-0">

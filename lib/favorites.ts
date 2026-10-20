@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 /**
  * お気に入りの板。
@@ -16,11 +16,40 @@ import { useCallback, useEffect, useState } from 'react';
  * 引き継ぎコードで別の端末に移ってもお気に入りは付いてこない。
  * 板はいつでも一覧から探せるので、失っても手が止まらないものに留めている。
  *
+ * ---------------------------------------------------------------------------
+ * **状態はこのファイルの中に1つだけ持つ。**
+ *
+ * 最初は useState と useEffect で、呼んだ部品ごとに持っていた。
+ * そうすると、一覧の星（FavoriteToggle）を押しても、
+ * 並べ替えに使っている板一覧側の控えが古いままになる。
+ * 星は黄色くなるのに「お気に入り」の面には出てこない、という状態になっていた。
+ *
+ * 置き場は外（localStorage）にあるのだから、Reactの状態として各部品に
+ * 持たせるのが間違いだった。useSyncExternalStore で、
+ * 全員が同じ1つを見るようにする。押した瞬間に、見ている全部が揃って変わる。
+ * ---------------------------------------------------------------------------
+ *
  * 書けない環境（プライベートブラウジング等）では、その画面を開いている間だけ
  * 覚えている状態になる。読み書きは必ず try で囲む。
  */
 
 const KEY = 'mz_favorite_boards';
+
+/**
+ * サーバ側で描くときの中身。
+ *
+ * localStorage はサーバに無いので、必ず空で描く。
+ * 実体を毎回新しく作らないのは、useSyncExternalStore が
+ * 同じものかどうかを参照で見るため（作り直すと描き直しが止まらない）。
+ *
+ * この配列そのものが返ってきたかどうかで「まだ読めていない」も判る（ready）。
+ */
+const SERVER_EMPTY: string[] = [];
+
+/** 読み込んだ控え。null は「まだ読んでいない」 */
+let cache: string[] | null = null;
+
+const listeners = new Set<() => void>();
 
 /** 一覧の2つ目の面に出す順番を保つため、押した順で持つ */
 function read(): string[] {
@@ -43,35 +72,55 @@ function write(ids: string[]): void {
   }
 }
 
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 /**
- * お気に入りの読み書き。
+ * いまのお気に入り。
  *
- * 最初の描画では必ず空で始める。localStorage はサーバ側に無いので、
- * 初期値として読むと、描き出した内容と最初の描画が食い違う。
+ * 同じ中身のときは同じ配列を返さなければならない（参照で比べられる）。
+ * だから読み込みは一度だけで、変えるときだけ新しい配列に差し替える。
  */
+function snapshot(): string[] {
+  if (cache === null) cache = read();
+  return cache;
+}
+
+function serverSnapshot(): string[] {
+  return SERVER_EMPTY;
+}
+
+/** 入れる・外す。見ている全部の部品に伝わる */
+export function toggleFavorite(boardId: string): void {
+  const current = snapshot();
+  const next = current.includes(boardId)
+    ? current.filter((id) => id !== boardId)
+    : [...current, boardId];
+
+  cache = next;
+  write(next);
+  for (const listener of listeners) listener();
+}
+
 export function useFavorites() {
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    setFavorites(read());
-    setReady(true);
-  }, []);
-
-  const toggle = useCallback((boardId: string) => {
-    setFavorites((prev) => {
-      const next = prev.includes(boardId)
-        ? prev.filter((id) => id !== boardId)
-        : [...prev, boardId];
-      write(next);
-      return next;
-    });
-  }, []);
+  const favorites = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
 
   const isFavorite = useCallback(
     (boardId: string) => favorites.includes(boardId),
     [favorites]
   );
 
-  return { favorites, isFavorite, toggle, ready };
+  return {
+    favorites,
+    isFavorite,
+    toggle: toggleFavorite,
+    /**
+     * 手元の控えを読めたか。
+     * サーバ側で描いた直後（まだ読めていない）は false になる。
+     * ☆ で描いてから★に入れ替わると、押した覚えのない星が動いたように見える。
+     */
+    ready: favorites !== SERVER_EMPTY,
+  };
 }
