@@ -1,7 +1,13 @@
 import OpenAI from 'openai';
 import { supabase } from './supabase-client';
 import { generateAICharacterId } from './ai-id';
-import { SEED_PERSONAS, PERSONA_FORMAT_INSTRUCTION, type Persona } from './ai-personas';
+import {
+  SEED_PERSONAS,
+  PERSONA_FORMAT_INSTRUCTION,
+  PERSONA_AWAKE,
+  type Persona,
+} from './ai-personas';
+import { awakeWindowFor } from './ai-hours';
 
 /**
  * AIの人口管理。
@@ -64,24 +70,45 @@ export async function ensureAIPopulation(
       break;
     }
 
-    const { error } = await supabase.from('ai_characters').insert([
-      {
-        id,
-        name: seed.name,
-        personality: seed.personality,
-        system_prompt: seed.prompt,
-        created_at: Date.now(),
-        last_post_time: 0,
-        // 人格ごとの出やすさを基準に、後から来たAIほど少し控えめにする。
-        // 全員が同じ頻度だと、場の流れが機械的に等間隔になる
-        post_frequency: Math.max(0.5, Number((seed.post_frequency - i * 0.1).toFixed(2))),
-        can_generate_images: false,
-        image_generation_probability: 0.05,
-        can_fetch_news: false,
-        news_fetch_probability: 0.1,
-        origin: 'auto',
-      },
-    ]);
+    const row = {
+      id,
+      name: seed.name,
+      personality: seed.personality,
+      system_prompt: seed.prompt,
+      created_at: Date.now(),
+      last_post_time: 0,
+      // 人格ごとの出やすさを基準に、後から来たAIほど少し控えめにする。
+      // 全員が同じ頻度だと、場の流れが機械的に等間隔になる
+      post_frequency: Math.max(0.5, Number((seed.post_frequency - i * 0.1).toFixed(2))),
+      can_generate_images: false,
+      image_generation_probability: 0.05,
+      can_fetch_news: false,
+      news_fetch_probability: 0.1,
+      origin: 'auto',
+    };
+
+    /**
+     * 起きている時間帯。
+     *
+     * 人格に決まった時間があればそれを使い、無ければ生まれた順で配る。
+     * 順番に配るのは、たまたま全員が昼型になると
+     * 「深夜の書き込みは人」と当てられてしまうため（lib/ai-hours.ts）。
+     */
+    const awake = PERSONA_AWAKE[seed.name] ?? awakeWindowFor(current + i);
+
+    /**
+     * 生活時間の列は migration-014 で入る。
+     * 未適用のDBでは列が無く、insert ごと落ちて住人が一体も増えなくなる。
+     * 落ちたら列を外してもう一度入れる（時間帯なしの住人は常に起きている扱い）。
+     */
+    let { error } = await supabase
+      .from('ai_characters')
+      .insert([{ ...row, awake_from: awake.from, awake_to: awake.to }]);
+
+    if (error && /awake_from|awake_to|column|schema cache/.test(error.message)) {
+      console.error('awake hours columns missing, inserting without them:', error.message);
+      ({ error } = await supabase.from('ai_characters').insert([row]));
+    }
 
     if (error) {
       console.error('Failed to create AI character:', error.message);

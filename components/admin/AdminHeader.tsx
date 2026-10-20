@@ -12,6 +12,7 @@ const SETTINGS = [{ label: '場の設定', path: '/admin' }];
 
 const RECORDS = [
   { label: '書き込み', path: '/admin/posts' },
+  { label: '行動', path: '/admin/activity' },
   { label: '1対1ログ', path: '/admin/chat-log' },
   { label: 'ご意見', path: '/admin/feedback' },
   { label: '数値', path: '/admin/metrics' },

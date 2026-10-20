@@ -23,7 +23,7 @@ export default function BoardAdmin() {
 
   const load = async () => {
     // 下げた板も出す。出さないと、下げた時点で実質の削除になる
-    const res = await fetch('/api/boards?includeArchived=1');
+    const res = await fetch('/api/boards?includeArchived=1&admin=1');
     const data = await res.json();
     setBoards(data.boards || []);
     setLoading(false);

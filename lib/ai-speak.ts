@@ -7,6 +7,8 @@ import { ensureAIPopulation } from './ai-population';
 import { shouldAIReact, REACTION_EMOJIS } from './ai-manager';
 import { generateMatchingImage, searchAndComment } from './ai-extra';
 import { maybeCreateBoard } from './ai-board';
+import { createStampAsResident } from './ai-stamp';
+import { wakefulness } from './ai-hours';
 
 /**
  * 板ごとの自立発言。
@@ -58,6 +60,9 @@ export interface AIConfig {
   ai_board_creation_probability: number;
   ai_board_creation_daily_budget: number;
   ai_max_boards: number;
+  /** 住人がスタンプを作る見込みと、1日の個数（lib/ai-stamp.ts） */
+  ai_stamp_probability: number;
+  ai_stamp_daily_budget: number;
   [key: string]: unknown;
 }
 
@@ -89,6 +94,9 @@ const DEFAULTS: AIConfig = {
   ai_board_creation_probability: 0.05,
   ai_board_creation_daily_budget: 1,
   ai_max_boards: 12,
+  // スタンプは絵を1枚作るので、写真と同じだけ高い。確率も個数もかなり絞る
+  ai_stamp_probability: 0.02,
+  ai_stamp_daily_budget: 1,
 };
 
 export interface SpeakOutcome {
@@ -109,6 +117,9 @@ interface AICharacterRow {
   news_fetch_probability?: number;
   can_generate_images?: boolean;
   image_generation_probability?: number;
+  /** 起きている時間帯（0〜23）。無ければ常に起きている扱い。lib/ai-hours.ts */
+  awake_from?: number | null;
+  awake_to?: number | null;
 }
 
 /** 設定。マイグレーション未適用の列は既定値で埋める */
@@ -597,11 +608,23 @@ ${photo.caption}` : content,
   // リアクションは生成を伴わないので、費用の枠とは別で扱う
   await reactSometimes(posts, state);
 
+  // ごくたまに、板の流れからスタンプを作る（作る側が人だけだと住人が割れる）
+  const stamp = await maybeCreateStamp({
+    posts,
+    boardTitle: board?.title,
+    character: aiCharacter,
+    config,
+  });
+
   return {
     boardId,
     posted: true,
-    reason: [photo ? 'photo' : null, followUp ? 'search' : null].filter(Boolean).length
-      ? `posted+${[photo ? 'photo' : null, followUp ? 'search' : null].filter(Boolean).join('+')}`
+    reason: [photo ? 'photo' : null, followUp ? 'search' : null, stamp ? 'stamp' : null].filter(
+      Boolean
+    ).length
+      ? `posted+${[photo ? 'photo' : null, followUp ? 'search' : null, stamp ? 'stamp' : null]
+          .filter(Boolean)
+          .join('+')}`
       : 'posted',
     content,
     aiId: aiCharacter.id,
@@ -639,7 +662,14 @@ async function nextInterval(boardId: string, config: AIConfig, now: number): Pro
   return Math.round(base * (0.75 + Math.random() * 0.5));
 }
 
-/** その板で直前に喋っていない住人から選ぶ */
+/**
+ * その板で直前に喋っていない住人から選ぶ。
+ *
+ * 選ばれやすさは、人格ごとの出やすさ（post_frequency）に
+ * いまの時間の生活ぶん（lib/ai-hours.ts）を掛けたもので決まる。
+ * 眠っている時間帯の住人は間隔が長くなるが、黙りはしない。
+ * 全員が同じ時間に黙ると、その時間の書き込みが人だけになってしまう。
+ */
 function pickCharacter(
   characters: Array<Record<string, unknown>>,
   posts: Post[],
@@ -656,7 +686,15 @@ function pickCharacter(
 
   const eligible = characters.filter((c) => {
     const id = c.id as string;
-    const frequency = (c.post_frequency as number) || 1.0;
+    const frequency =
+      ((c.post_frequency as number) || 1.0) *
+      wakefulness(
+        {
+          awake_from: c.awake_from as number | null | undefined,
+          awake_to: c.awake_to as number | null | undefined,
+        },
+        now
+      );
     const base = config.cooldown_min + Math.random() * (config.cooldown_max - config.cooldown_min);
     return now - (lastInBoard.get(id) || 0) >= base / frequency;
   });
@@ -788,8 +826,22 @@ async function maybeSearchFollowUp(args: {
 }
 
 /** 今日の枚数・回数がまだ残っているか */
-async function withinDailyLimit(kind: 'image' | 'search', config: AIConfig): Promise<boolean> {
-  const limit = kind === 'image' ? config.ai_image_daily_budget : config.ai_search_daily_budget;
+async function withinDailyLimit(
+  kind: 'image' | 'search' | 'stamp',
+  config: AIConfig
+): Promise<boolean> {
+  const limits: Record<typeof kind, number> = {
+    image: config.ai_image_daily_budget,
+    search: config.ai_search_daily_budget,
+    stamp: config.ai_stamp_daily_budget,
+  };
+  const events: Record<typeof kind, string> = {
+    image: 'ai_image',
+    search: 'ai_search',
+    stamp: 'ai_stamp',
+  };
+
+  const limit = limits[kind];
   if (limit <= 0) return false;
 
   const startOfDay = new Date();
@@ -798,10 +850,52 @@ async function withinDailyLimit(kind: 'image' | 'search', config: AIConfig): Pro
   const { count } = await supabase
     .from('logs')
     .select('id', { count: 'exact', head: true })
-    .eq('event_type', kind === 'image' ? 'ai_image' : 'ai_search')
+    .eq('event_type', events[kind])
     .gte('created_at', startOfDay.getTime());
 
   return (count || 0) < limit;
+}
+
+/**
+ * 住人がスタンプを作る。
+ *
+ * 作れるのが人だけだと、作った人のIDから住人が割れていく（lib/ai-stamp.ts）。
+ * ここは費用の蓋だけを持って、中身はあちらに任せる。
+ */
+async function maybeCreateStamp(args: {
+  posts: Post[];
+  boardTitle?: string;
+  character: AICharacterRow;
+  config: AIConfig;
+}): Promise<string | null> {
+  const { posts, boardTitle, character, config } = args;
+
+  if (Math.random() >= config.ai_stamp_probability) return null;
+  if (!(await withinDailyLimit('stamp', config))) return null;
+
+  const created = await createStampAsResident({
+    recent: posts
+      .slice(0, 8)
+      .map((p) => p.content)
+      .filter(Boolean),
+    boardTitle,
+    characterId: character.id,
+    characterPrompt: character.system_prompt,
+  });
+
+  if (!created) return null;
+
+  await supabase.from('logs').insert([
+    {
+      event_type: 'ai_stamp',
+      user_id: character.id,
+      post_id: null,
+      metadata: { stamp_id: created.id, name: created.name, board_title: boardTitle ?? null },
+      created_at: Date.now(),
+    },
+  ]);
+
+  return created.name;
 }
 
 /**

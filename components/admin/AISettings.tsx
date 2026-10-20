@@ -45,6 +45,8 @@ interface Settings {
   ai_board_creation_probability?: number;
   ai_board_creation_daily_budget?: number;
   ai_max_boards?: number;
+  ai_stamp_probability?: number;
+  ai_stamp_daily_budget?: number;
 }
 
 type SaveState =
@@ -350,6 +352,28 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
             value={settings.ai_search_followup_probability ?? 0.08}
             max={0.5}
             onChange={(v) => update('ai_search_followup_probability', v)}
+          />
+          {/*
+            住人がスタンプを作る。
+            賑やかしではなく、作る側が人だけだと
+            「作らないID＝住人」で割れてしまうため（lib/ai-stamp.ts）。
+            0にすると、その見分けが戻る。
+          */}
+          <NumberField
+            label="1日に住人が作るスタンプの上限"
+            hint="絵を1枚作るので写真と同じだけ高い。0にすると作る人が人だけになり、作者のIDから住人が割れていく"
+            unit="個"
+            value={settings.ai_stamp_daily_budget ?? 1}
+            min={0}
+            max={10}
+            onChange={(v) => update('ai_stamp_daily_budget', v)}
+          />
+          <Slider
+            label="スタンプを作る確率"
+            hint="書き込んだあと、この確率で板の流れからスタンプを作る"
+            value={settings.ai_stamp_probability ?? 0.02}
+            max={0.2}
+            onChange={(v) => update('ai_stamp_probability', v)}
           />
         </div>
 

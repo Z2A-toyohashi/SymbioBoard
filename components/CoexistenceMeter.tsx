@@ -14,20 +14,36 @@ import { coexistenceRate } from '@/lib/utils';
  * 内訳の件数までは出すが、どの書き込みがAIかは出さない。
  * 「10件のうち3件はAIだが、どれかは分からない」という状態がこの場の中身。
  *
+ * 件数は数えずに受け取る。
+ *   以前はここで posts の author_type を数えていた。つまり画面側に
+ *   「どれがAIか」が届いていたということで、通信を覗けば分かる状態だった。
+ *   いまは /api/posts が件数だけを返し、印は落ちている。
+ *
  * 計器は輪郭を太くして、画面の中で一番はっきりした物にしてある。
  * この数字がこの場の体温で、見に来る理由そのものなので、
  * 読み取りに手間がかからないほうがいい。
  *
- * 算出はすべて画面側で行う。投稿はすでに手元にあるので、
- * 問い合わせを挟む理由がない。通信の都合で計器が消えることもなくなる。
+ * 見立ては2つめの計器。「人だと思われた率」は人間側の自信の計器で、
+ * 共存度（実際の混ざり具合）とは別のものを測っている。
+ * 正解は永久に出ない（理由は app/api/guesses/route.ts）。
  */
 interface CoexistenceMeterProps {
+  /** 場の空気の判定に使う。人かAIかの印は入っていない */
   posts: Post[];
+  humanCount: number;
+  aiCount: number;
+  /** 見立てのうち「人だと思う」の割合。まだ誰も押していなければ null */
+  guessHumanRate?: number | null;
+  guessTotal?: number;
 }
 
-export default function CoexistenceMeter({ posts }: CoexistenceMeterProps) {
-  const aiCount = posts.filter((p) => p.author_type === 'ai').length;
-  const humanCount = posts.length - aiCount;
+export default function CoexistenceMeter({
+  posts,
+  humanCount,
+  aiCount,
+  guessHumanRate = null,
+  guessTotal = 0,
+}: CoexistenceMeterProps) {
   const rate = coexistenceRate(humanCount, aiCount);
   const label = SPACE_STATE_LABEL[detectSpaceState(posts)];
 
@@ -38,7 +54,10 @@ export default function CoexistenceMeter({ posts }: CoexistenceMeterProps) {
       /* 読み上げには数字だけを渡す。棒も札も同じことを言っているので、
          飾りは読ませず、ここで一度だけ読ませる */
       role="img"
-      aria-label={`共存度 ${rate}パーセント。人の書き込み${humanCount}件、AIの書き込み${aiCount}件。${label.name}`}
+      aria-label={
+        `共存度 ${rate}パーセント。人の書き込み${humanCount}件、AIの書き込み${aiCount}件。${label.name}` +
+        (guessHumanRate !== null ? `。見立てでは${guessHumanRate}パーセントが人` : '')
+      }
     >
       <div className="mx-auto flex max-w-[1180px] items-center gap-2.5 px-3 py-2.5 sm:gap-4 sm:px-6">
         <span
@@ -80,6 +99,19 @@ export default function CoexistenceMeter({ posts }: CoexistenceMeterProps) {
           <span className="mz-ink-faint mx-1">:</span>
           AI {aiCount}
         </span>
+
+        {/*
+          見立て。誰かが一度でも押していれば出す。
+          「何人がそう思っているか」だけで、合っているかは出ない
+        */}
+        {guessHumanRate !== null && (
+          <span
+            className="mz-mono mz-ink-faint hidden shrink-0 text-[11px] tabular-nums sm:inline"
+            title={`この板への見立て${guessTotal}件のうち、${guessHumanRate}%が「人だと思う」。答え合わせはありません`}
+          >
+            見立て {guessHumanRate}%
+          </span>
+        )}
 
         <span className="mz-chip mz-chip-quiet hidden shrink-0 sm:inline-flex">{label.name}</span>
       </div>

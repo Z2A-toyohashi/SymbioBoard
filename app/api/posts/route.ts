@@ -2,9 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
 import type { Post } from '@/types';
 
+/**
+ * 板の書き込みを読む。
+ *
+ * **author_type（人かAIか）は返さない。**
+ *
+ * 以前ここは select('*') をそのまま返していたので、応答に author_type が
+ * 乗っていた。画面には出していなかったが、
+ *
+ *     curl '/api/posts?boardId=...'
+ *
+ * と叩けば、どのレスがAIかを全部読めた。開発者ツールの通信欄でも同じ。
+ * 「どれが人でどれがAIか分からない」のはこのアプリの中身そのもので、
+ * 画面に出さないことと通信に乗せないことは、同じ一つの約束の両面になる。
+ *
+ * 共存度（人とAIがどれだけ釣り合っているか）は数字としてなら出してよいので、
+ * 件数だけをここで数えて返す。「10件のうち3件はAIだが、どれかは分からない」
+ * という状態が、この場の正しい見え方。
+ *
+ * 管理画面だけは author_type が要る（どの住人が何を書いたかを追うため）。
+ * admin=1 のときだけ付けて返す。
+ * ※ 管理画面には認証が無い（既知の弱点）。公開する前に鍵を付けること。
+ */
 export async function GET(request: NextRequest) {
   try {
-    const boardId = new URL(request.url).searchParams.get('boardId');
+    const params = new URL(request.url).searchParams;
+    const boardId = params.get('boardId');
+    const isAdmin = params.get('admin') === '1';
 
     let query = supabase.from('posts').select('*');
     if (boardId) {
@@ -15,10 +39,23 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ posts: data || [] });
+    const rows = (data || []) as Post[];
+    const aiCount = rows.filter((p) => p.author_type === 'ai').length;
+
+    return NextResponse.json({
+      posts: isAdmin
+        ? rows
+        : // 印を落として渡す。列を1つ外すだけだが、ここがこの約束の要になる
+          rows.map((row) => {
+            const copy: Partial<Post> = { ...row };
+            delete copy.author_type;
+            return copy;
+          }),
+      counts: { human: rows.length - aiCount, ai: aiCount },
+    });
   } catch (error) {
     console.error('Failed to fetch posts:', error);
-    return NextResponse.json({ posts: [] }, { status: 500 });
+    return NextResponse.json({ posts: [], counts: { human: 0, ai: 0 } }, { status: 500 });
   }
 }
 
@@ -57,12 +94,18 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    // ログを記録
+    // ログを記録。板も一緒に残す（どの板で書かれたかが後から要る）
     await supabase.from('logs').insert([{
       event_type: post.thread_id ? 'reply' : 'post',
       user_id: post.author_id,
       post_id: post.id,
-      metadata: { author_type: post.author_type, type: post.type },
+      metadata: {
+        author_type: post.author_type,
+        type: post.type,
+        board_id: post.board_id,
+        content: post.content?.slice(0, 500),
+        reply_to: post.thread_id,
+      },
       created_at: Date.now(),
     }]);
 
@@ -77,6 +120,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const postId = searchParams.get('id');
+    // 消した人。管理画面からの削除では付かない
+    const userId = searchParams.get('userId');
 
     if (!postId) {
       return NextResponse.json({ error: 'Post ID required' }, { status: 400 });
@@ -90,14 +135,28 @@ export async function DELETE(request: NextRequest) {
 
     if (error) throw error;
 
-    // ログを記録
-    await supabase.from('logs').insert([{
-      event_type: 'post',
-      user_id: 'system',
-      post_id: postId,
-      metadata: { action: 'delete' },
-      created_at: Date.now(),
-    }]);
+    /**
+     * 消したことの記録。
+     *
+     * post_id の列には入れない。あの列は posts を参照しているので、
+     * いま消した書き込みを指すと外部キー違反になって記録自体が残らない。
+     * 消された書き込みのIDは metadata に持つ。
+     *
+     * 誰が消したか分からないときは記録しない。logs.user_id は users を
+     * 参照しているので、'system' のような実在しないIDを入れると
+     * 外部キー違反で行が入らず、入ったつもりの記録だけが残る。
+     */
+    if (userId) {
+      await supabase.from('logs').insert([
+        {
+          event_type: 'post_delete',
+          user_id: userId,
+          post_id: null,
+          metadata: { post_id: postId },
+          created_at: Date.now(),
+        },
+      ]);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

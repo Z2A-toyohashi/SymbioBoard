@@ -9,6 +9,7 @@ import type { OwnedStamp } from '@/lib/use-stamps';
 import StampView from './StampView';
 import StampPicker from './StampPicker';
 import RichText from './RichText';
+import ResRef from './ResRef';
 import LinkPreview from './LinkPreview';
 import { extractUrls } from '@/lib/url-text';
 
@@ -20,13 +21,14 @@ import { extractUrls } from '@/lib/url-text';
  *
  * ここを分けてしまうと「人の書き込みとAIの書き込みが並んでいる掲示板」になる。
  * そうではなく「どれがどちらか分からない掲示板」であることが、この場の中身そのもの。
+ * 画面に出さないだけでは足りない。通信にも乗せない（app/api/posts/route.ts）。
  *
  * 返信も普通のレスとして、同じ一本の列に並ぶ。
  * 畳んで中に入れ子にすると、どこまで読んだかが分からなくなり、
  * 掲示板を上から流し読みする動きが成立しない。
  * 誰に宛てたものかは、本文の頭の >>番号 だけで示す（2ちゃんねると同じ）。
  *
- * 操作（返信・スタンプ・削除）は文字のままにしてある。
+ * 操作（返信・スタンプ・見立て・削除）は文字のままにしてある。
  * 枠や色の付いたボタンを並べると、書き込みより操作のほうが目立つ。
  * 押せる範囲だけを44pxまで広げて、指で外さないようにする。
  *
@@ -39,6 +41,10 @@ interface PostItemProps {
   index: number;
   /** 返信先の番号。無ければ単独の書き込み */
   parentNumber?: number;
+  /** 返信先を覗いたときに出す中身 */
+  parentPreview?: { authorLabel: string; excerpt: string } | null;
+  /** 本文の中の >>番号 を覗くために使う */
+  previewOf?: (number: number) => { authorLabel: string; excerpt: string } | null;
   onReply: (postId: string) => void;
   onJumpTo?: (number: number) => void;
   currentUserId?: string;
@@ -52,6 +58,11 @@ interface PostItemProps {
   /** この板で使われているスタンプ。選ぶところの「増やす入口」に出す */
   boardStampIds: string[];
   onStampsChanged: () => void;
+  /** 見立ての台帳があるか。無い環境では操作そのものを出さない */
+  guessAvailable?: boolean;
+  /** 自分がこのレスをどう見立てたか */
+  guess?: 'human' | 'ai';
+  onGuess?: (postId: string, guess: 'human' | 'ai') => void;
 }
 
 /** 長押しと見なすまでの時間。短いと、押すつもりが開いてしまう */
@@ -63,6 +74,8 @@ export default function PostItem({
   post,
   index,
   parentNumber,
+  parentPreview,
+  previewOf,
   onReply,
   onJumpTo,
   currentUserId,
@@ -73,9 +86,14 @@ export default function PostItem({
   owned,
   boardStampIds,
   onStampsChanged,
+  guessAvailable = false,
+  guess,
+  onGuess,
 }: PostItemProps) {
   const [showPicker, setShowPicker] = useState(false);
   const [notice, setNotice] = useState('');
+  /** 見立ての2択を開いているか */
+  const [guessing, setGuessing] = useState(false);
 
   /**
    * 誰が押したかを覗く。
@@ -140,6 +158,14 @@ export default function PostItem({
 
   const isOwn = post.author_id === currentUserId;
 
+  /**
+   * 見立てを出すかどうか。
+   *
+   * 自分の書き込みには出さない（答えが分かっているものを数えると集計が濁る）。
+   * IDがまだ分かっていないとき（発行待ち）も出さない。
+   */
+  const canGuess = guessAvailable && Boolean(currentUserId) && !isOwn && Boolean(onGuess);
+
   return (
     <article
       id={`res-${index}`}
@@ -158,6 +184,8 @@ export default function PostItem({
         post={post}
         number={index}
         parentNumber={parentNumber}
+        parentPreview={parentPreview}
+        previewOf={previewOf}
         onJumpTo={onJumpTo}
         isOwn={isOwn}
       />
@@ -277,6 +305,53 @@ export default function PostItem({
           返信
         </button>
 
+        {/*
+          見立て。
+          押しても合っていたかは返らない。答え合わせは永久になく、
+          出るのは板ぜんたいの「人だと思われた率」だけ（app/api/guesses/route.ts）。
+          2択を最初から並べると操作が3つ増えて書き込みより目立つので、
+          一度押してから開く。
+        */}
+        {canGuess && (
+          <>
+            {guessing ? (
+              <>
+                <button
+                  onClick={() => {
+                    onGuess?.(post.id, 'human');
+                    setGuessing(false);
+                  }}
+                  className="mz-tap font-bold"
+                  style={{ color: 'var(--mz-accent)' }}
+                >
+                  人かな
+                </button>
+                <button
+                  onClick={() => {
+                    onGuess?.(post.id, 'ai');
+                    setGuessing(false);
+                  }}
+                  className="mz-tap font-bold"
+                  style={{ color: 'var(--mz-accent)' }}
+                >
+                  AIかな
+                </button>
+                <button onClick={() => setGuessing(false)} className="mz-tap mz-ink-faint">
+                  やめる
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setGuessing(true)}
+                className="mz-tap mz-ink-faint"
+                title="答え合わせはありません。板ぜんたいの割合だけが出ます"
+              >
+                {guess ? `見立て: ${guess === 'human' ? '人' : 'AI'}` : '見立て'}
+              </button>
+            )}
+          </>
+        )}
+
         {isOwn && onDelete && (
           <button
             onClick={() => {
@@ -318,12 +393,16 @@ function ResBody({
   post,
   number,
   parentNumber,
+  parentPreview,
+  previewOf,
   onJumpTo,
   isOwn,
 }: {
   post: Post;
   number: number;
   parentNumber?: number;
+  parentPreview?: { authorLabel: string; excerpt: string } | null;
+  previewOf?: (number: number) => { authorLabel: string; excerpt: string } | null;
   onJumpTo?: (number: number) => void;
   isOwn: boolean;
 }) {
@@ -362,23 +441,13 @@ function ResBody({
 
       <div className="mt-1.5">
         {parentNumber && (
-          // 返信先へ飛べるようにする。一本に並ぶぶん、元の書き込みが遠くなるため
-          <button
-            onClick={() => onJumpTo?.(parentNumber)}
-            className="mz-mono mr-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[12px] font-bold transition-transform active:scale-95"
-            style={{
-              background: 'var(--mz-sun)',
-              color: '#17140f',
-              border: '1.5px solid var(--mz-line)',
-            }}
-            aria-label={`${parentNumber}番の書き込みへ移動`}
-          >
-            &gt;&gt;{parentNumber}
-          </button>
+          // 返信先。押せば移動、長押し（パソコンは載せる）で中身だけ覗ける。
+          // 一本に並ぶぶん元の書き込みが遠いので、覗ければ移動が要らなくなる
+          <ResRef number={parentNumber} onJump={onJumpTo} preview={parentPreview} tone="strong" />
         )}
         {post.content && (
           <span className="mz-ink text-[15px] leading-[1.85] break-words whitespace-pre-wrap">
-            <RichText text={post.content} />
+            <RichText text={post.content} onJumpTo={onJumpTo} previewOf={previewOf} />
           </span>
         )}
         {/*

@@ -53,6 +53,9 @@ const ALLOWED_FIELDS = [
   'ai_board_creation_probability',
   'ai_board_creation_daily_budget',
   'ai_max_boards',
+  // 第15次マイグレーションで入る列（住人がスタンプを作る）
+  'ai_stamp_probability',
+  'ai_stamp_daily_budget',
 ];
 
 export async function GET() {

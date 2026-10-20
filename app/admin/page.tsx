@@ -23,7 +23,7 @@ export default function AdminPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [postsRes, usersRes] = await Promise.all([fetch('/api/posts'), fetch('/api/users')]);
+        const [postsRes, usersRes] = await Promise.all([fetch('/api/posts?admin=1'), fetch('/api/users')]);
 
         const postsData = await postsRes.json();
         const allPosts = postsData.posts || [];

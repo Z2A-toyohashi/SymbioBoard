@@ -25,10 +25,15 @@ export interface BoardSummary extends Board {
   participants: Participant[];
 }
 
-// 板の参加者（人もAIも）
+/**
+ * 板の参加者（人もAIも）。
+ *
+ * type と、AI住人の名前が入るのは、管理画面に答えるときだけ。
+ * 板の側では全員が「ID:4桁」で並ぶ（理由は app/api/boards/route.ts）。
+ */
 export interface Participant {
   id: string;
-  type: 'user' | 'ai';
+  type?: 'user' | 'ai';
   name: string;
   post_count: number;
 }
@@ -40,16 +45,31 @@ export interface Post {
   type: 'text' | 'voice' | 'image';
   created_at: number;
   thread_id: string | null;
-  author_type: 'user' | 'ai';
+  /**
+   * 人かAIか。
+   *
+   * **画面側には来ない。** /api/posts は板に返すときこの印を落とす
+   * （理由は app/api/posts/route.ts）。入っているのは、サーバ側で
+   * 書き込みを作るときと、管理画面が admin=1 で読むときだけ。
+   *
+   * 画面側のコードがこれを読んでいたら、それは漏れている合図。
+   */
+  author_type?: 'user' | 'ai';
   author_id: string;
   media_url: string | null;
   board_id: string | null;
 }
 
-// ログの型定義
+/**
+ * 記録。
+ *
+ * 種類を型で縛るのをやめた。人の行動（読んだ・押した・見立てた）を
+ * 残すようになって種類が増え続けるので、ここに並べても追いつかない。
+ * 受け取る側（app/api/activity/route.ts）が、入れていい名前を一箇所で持つ。
+ */
 export interface Log {
   id: string;
-  event_type: 'post' | 'view' | 'reply' | 'ai_intervention';
+  event_type: string;
   user_id: string;
   post_id: string | null;
   metadata: Record<string, unknown> | null;
@@ -66,14 +86,6 @@ export const SPACE_STATE_LABEL: Record<SpaceState, { name: string; hint: string 
   SILENCE: { name: 'しずか', hint: '止まっている。誰かが話題を出しやすい' },
   FRAGILE: { name: 'ゆらぎ', hint: 'どちらにも転ぶ場面' },
   SOLO: { name: 'ひとりごと', hint: '返事がないまま置かれている' },
-};
-
-// AI介入確率
-export const AI_INTERVENTION_PROBABILITY: Record<SpaceState, number> = {
-  FLOW: 0,
-  SILENCE: 0.35,
-  FRAGILE: 0.15,
-  SOLO: 0.5,
 };
 
 // ユーザーカラー（17色）

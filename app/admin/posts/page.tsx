@@ -39,7 +39,7 @@ export default function PostsPage() {
 
   const loadData = async () => {
     try {
-      const res = await fetch('/api/posts');
+      const res = await fetch('/api/posts?admin=1');
       const data = await res.json();
       const allPosts: Post[] = data.posts || [];
 

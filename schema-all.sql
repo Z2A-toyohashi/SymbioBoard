@@ -756,3 +756,162 @@ INSERT INTO stamps (id, kind, name, image_url, created_by, created_at) VALUES
   ('👀', 'unicode', 'みてる', NULL, NULL, 1700000000000)
 ON CONFLICT (id) DO NOTHING;
 -- <<< スタンプの台帳 ここまで >>>
+
+-- ============================================================
+-- 人の行動の記録 / 見立て / 住人の生活時間 / 住人のスタンプ
+-- ============================================================
+-- 第12〜15次マイグレーションぶん。新規DBはこのファイルだけで完結させる方針なので、
+-- migration-012〜015 と同じ内容をここに畳んである。
+-- どちらかを変えたら、もう一方も合わせること。
+
+-- <<< 行動の記録（migration-012-activity-log.sql と同じ） >>>
+-- 書き込みが消えても、その人の行動の記録は残す。
+-- ON DELETE CASCADE のままだと、消された書き込みごと過去の記録まで消える。
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT conname
+    FROM pg_constraint
+    WHERE conrelid = 'logs'::regclass
+      AND contype = 'f'
+      AND pg_get_constraintdef(oid) LIKE 'FOREIGN KEY (post_id)%'
+  LOOP
+    EXECUTE format('ALTER TABLE logs DROP CONSTRAINT %I', r.conname);
+  END LOOP;
+
+  ALTER TABLE logs
+    ADD CONSTRAINT logs_post_id_fkey
+    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE SET NULL;
+END $$;
+
+-- ひとりの動きを時刻順に／板ごとに読むための索引（板は metadata の中）
+CREATE INDEX IF NOT EXISTS idx_logs_user_created ON logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_logs_board ON logs((metadata->>'board_id'));
+-- <<< 行動の記録 ここまで >>>
+
+-- <<< 見立て（migration-013-guesses.sql と同じ） >>>
+-- 「このレスは人だと思う / AIだと思う」。答え合わせは誰にも返さない。
+-- 出るのは板ごとの「見立てのうち何割が人だと言っているか」だけ。
+-- レスごとの票数も、本人の的中率も返さない（どちらも正解の手がかりになる）。
+CREATE TABLE IF NOT EXISTS guesses (
+  post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  board_id TEXT,
+  guess TEXT NOT NULL CHECK (guess IN ('human', 'ai')),
+  created_at BIGINT NOT NULL,
+  PRIMARY KEY (post_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_guesses_board ON guesses(board_id);
+CREATE INDEX IF NOT EXISTS idx_guesses_user ON guesses(user_id);
+
+ALTER TABLE guesses ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "Enable all access" ON guesses;
+  CREATE POLICY "Enable all access" ON guesses FOR ALL USING (true) WITH CHECK (true);
+END $$;
+-- <<< 見立て ここまで >>>
+
+-- <<< 住人の生活時間（migration-014-ai-awake-hours.sql と同じ） >>>
+-- 住人が24時間同じ調子で書いていると、時間帯の分布だけで住人が当てられる。
+-- 日本時間で見る。from > to は日付をまたぐ（22→6 は深夜型）。
+-- 眠っていても黙りはしない（全員が黙ると、その時間の書き込みが全部人になる）。
+ALTER TABLE ai_characters ADD COLUMN IF NOT EXISTS awake_from INTEGER;
+ALTER TABLE ai_characters ADD COLUMN IF NOT EXISTS awake_to INTEGER;
+
+COMMENT ON COLUMN ai_characters.awake_from IS '起きる時刻（0〜23、日本時間）。NULLなら常に起きている';
+COMMENT ON COLUMN ai_characters.awake_to IS '寝る時刻（0〜23、日本時間）。from より小さいときは日付をまたぐ';
+
+-- 既定の住人に、人格に合った時間帯を当てる（lib/ai-personas.ts の PERSONA_AWAKE と同じ）
+UPDATE ai_characters AS c
+SET awake_from = v.awake_from, awake_to = v.awake_to
+FROM (
+  VALUES
+    ('ポジティブAI', 6, 15),
+    ('冷静AI', 9, 19),
+    ('共感AI', 12, 23),
+    ('好奇心AI', 17, 2),
+    ('ニュースAI', 6, 15),
+    ('のんびりAI', 9, 19),
+    ('ひねくれAI', 20, 4),
+    ('食いしん坊AI', 12, 23),
+    ('夜更かしAI', 22, 6),
+    ('職人AI', 6, 15),
+    ('旅好きAI', 9, 19),
+    ('天然AI', 12, 23),
+    ('うろ覚えAI', 17, 2),
+    ('聞き役AI', 20, 4),
+    ('負けず嫌いAI', 22, 6)
+) AS v(name, awake_from, awake_to)
+WHERE c.name = v.name;
+
+-- 残り（実行中に生まれた住人）には順番で配る。乱択だと全員が昼型になりうる
+WITH numbered AS (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at, id) - 1 AS n
+  FROM ai_characters
+  WHERE awake_from IS NULL OR awake_to IS NULL
+),
+windows AS (
+  SELECT * FROM (
+    VALUES (0, 6, 15), (1, 9, 19), (2, 12, 23), (3, 17, 2), (4, 20, 4), (5, 22, 6)
+  ) AS w(slot, awake_from, awake_to)
+)
+UPDATE ai_characters AS c
+SET awake_from = w.awake_from, awake_to = w.awake_to
+FROM numbered n
+JOIN windows w ON w.slot = (n.n % 6)
+WHERE c.id = n.id;
+-- <<< 住人の生活時間 ここまで >>>
+
+-- <<< 住人のスタンプ（migration-015-ai-stamp-creation.sql と同じ） >>>
+-- 作れるのが人だけだと、作者のIDから住人が割れていく。
+ALTER TABLE ai_settings
+  ADD COLUMN IF NOT EXISTS ai_stamp_probability DECIMAL NOT NULL DEFAULT 0.02;
+ALTER TABLE ai_settings
+  ADD COLUMN IF NOT EXISTS ai_stamp_daily_budget INTEGER NOT NULL DEFAULT 1;
+
+COMMENT ON COLUMN ai_settings.ai_stamp_probability IS '書き込んだあと、住人がスタンプを作る確率';
+COMMENT ON COLUMN ai_settings.ai_stamp_daily_budget IS '住人が1日に作るスタンプの上限（全住人の合計）';
+-- <<< 住人のスタンプ ここまで >>>
+
+-- <<< Realtime から author_type を外す（migration-016-realtime-hide-author-type.sql と同じ） >>>
+-- 板の画面は Realtime で新しい書き込みを受ける。中身は使わず「来たら取り直す」
+-- だけにしているが、Realtime は行をそのままブラウザへ送るので、
+-- author_type が WebSocket に乗って届いてしまう。
+-- 「画面に出さない」と「通信に乗せない」は同じ約束なので、ここも閉じる。
+DO $$
+DECLARE
+  has_publication BOOLEAN;
+  has_posts BOOLEAN;
+BEGIN
+  SELECT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime')
+    INTO has_publication;
+
+  IF NOT has_publication THEN
+    RAISE NOTICE 'supabase_realtime が無いので何もしません';
+    RETURN;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'posts'
+  ) INTO has_posts;
+
+  IF has_posts THEN
+    EXECUTE 'ALTER PUBLICATION supabase_realtime DROP TABLE posts';
+  END IF;
+
+  EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE posts '
+       || '(id, board_id, thread_id, author_id, content, type, media_url, created_at)';
+
+  RAISE NOTICE 'Realtime が流す列から author_type を外しました';
+
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE WARNING '列を絞れませんでした（%）。PostgreSQL 15 より前の可能性があります。', SQLERRM;
+END $$;
+-- <<< Realtime ここまで >>>

@@ -11,10 +11,27 @@ import type { BoardSummary, Participant } from '@/types';
 
 export async function GET(request: NextRequest) {
   try {
+    const params = new URL(request.url).searchParams;
+
     // 管理画面からは閉じた板も要る。
     // 投稿が「どこに書かれたか」を追うとき、閉じた板だけ名前が出ないと行方が分からない。
-    const includeArchived =
-      new URL(request.url).searchParams.get('includeArchived') === '1';
+    const includeArchived = params.get('includeArchived') === '1';
+
+    /**
+     * 人かAIかを付けて返すのは、管理画面に答えるときだけ。
+     *
+     * 以前はここが常に participants[].type = 'ai' を返し、
+     * さらにAI住人の名前（管理画面にしか無いはずのもの）まで乗せていた。
+     * 板に出ている author_id と突き合わせれば、どのIDが住人かが分かり、
+     * そのIDの書き込みはすべてAIだと特定できた。
+     *
+     * 「どれが人でどれがAIか分からない」のはこのアプリの中身そのものなので、
+     * 板の側に渡すものからは、この印を落とす。
+     * 人数の内訳（人◯件 / AI◯件）は数字としてなら出してよいので残す。
+     *
+     * ※ 管理画面には認証が無い（既知の弱点）。公開する前に鍵を付けること。
+     */
+    const isAdmin = params.get('admin') === '1';
 
     const boardQuery = supabase.from('boards').select('*').order('created_at', { ascending: true });
     if (!includeArchived) boardQuery.eq('archived', false);
@@ -40,12 +57,17 @@ export async function GET(request: NextRequest) {
       }
 
       const participants: Participant[] = Array.from(counts.entries())
-        .map(([id, v]) => ({
-          id,
-          type: v.type,
-          name: v.type === 'ai' ? aiNames.get(id) || 'AI' : `ID:${displayId(id)}`,
-          post_count: v.count,
-        }))
+        .map(([id, v]) =>
+          isAdmin
+            ? {
+                id,
+                type: v.type,
+                name: v.type === 'ai' ? aiNames.get(id) || 'AI' : `ID:${displayId(id)}`,
+                post_count: v.count,
+              }
+            : // 板の側へ渡す形。全員が同じ「ID:4桁」で、種別は付かない
+              { id, name: `ID:${displayId(id)}`, post_count: v.count }
+        )
         .sort((a, b) => b.post_count - a.post_count);
 
       const aiPostCount = boardPosts.filter((p) => p.author_type === 'ai').length;

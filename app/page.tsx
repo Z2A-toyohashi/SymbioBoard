@@ -1,13 +1,38 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { BoardSummary } from '@/types';
 import { ensureUserId } from '@/lib/user';
 import { coexistenceRate, formatDate, formatTime } from '@/lib/utils';
 import { displayId } from '@/lib/short-id';
+import { useFavorites } from '@/lib/favorites';
+import { track } from '@/lib/activity';
 import SiteHeader from '@/components/SiteHeader';
 import Doodle, { DoodleScatter } from '@/components/Doodle';
+
+/**
+ * 板一覧。
+ *
+ * 面を2つに分けた。「タイムライン」（動きの新しい順に全部）と「お気に入り」。
+ *
+ * 板は誰でも立てられ、住人も立てる（lib/ai-board.ts）ので、放っておくと
+ * 一覧が伸び続ける。伸びるほど、いつも見ている板が下に流れていく。
+ * 並び替えで解くこともできるが、「新しい動きがある板」と「自分がよく見る板」は
+ * そもそも別の問いなので、1つの列に混ぜると どちらも読みにくくなる。
+ * だから列を2本にして、指で行き来できるようにした。
+ *
+ * 行き来は、横の指の動き（スワイプ）と、上の札のどちらでもできる。
+ * スワイプは指に追従させず、離した時点の向きで切り替える。
+ * 追従させると、縦に読もうとした指の少しの横ぶれで面が動いてしまう。
+ */
+
+/** これだけ横に動かしたら、面を切り替える */
+const SWIPE_DISTANCE = 60;
+/** 横の動きが縦の動きのこれ倍を超えていないと、切り替えない（縦読みを邪魔しない） */
+const SWIPE_RATIO = 1.5;
+
+type Tab = 'timeline' | 'favorites';
 
 export default function BoardListPage() {
   const [boards, setBoards] = useState<BoardSummary[]>([]);
@@ -17,7 +42,10 @@ export default function BoardListPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
+  const [tab, setTab] = useState<Tab>('timeline');
   const formRef = useRef<HTMLDivElement>(null);
+
+  const { favorites, isFavorite, toggle, ready } = useFavorites();
 
   /**
    * 板を立てる欄を開く。
@@ -49,6 +77,9 @@ export default function BoardListPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: id }),
       }).catch(() => {});
+
+      // 「どこを見たか」の記録。板を開く前の一覧も1件として残す
+      track('view_boards', { userId: id });
     });
 
     loadBoards();
@@ -84,6 +115,7 @@ export default function BoardListPage() {
       return;
     }
 
+    track('board_close', { userId, boardId: board.id, detail: { title: board.title } });
     await loadBoards();
   };
 
@@ -103,10 +135,173 @@ export default function BoardListPage() {
       return;
     }
 
+    const created = (await res.json().catch(() => ({}))) as { board?: { id?: string } };
+    track('board_create', {
+      userId,
+      boardId: created.board?.id ?? null,
+      detail: { title: title.trim(), has_description: Boolean(description.trim()) },
+    });
+
     setTitle('');
     setDescription('');
     setCreating(false);
     await loadBoards();
+  };
+
+  const toggleFavorite = (board: BoardSummary) => {
+    const was = isFavorite(board.id);
+    toggle(board.id);
+    track(was ? 'favorite_remove' : 'favorite_add', {
+      userId,
+      boardId: board.id,
+      detail: { title: board.title },
+    });
+  };
+
+  /** お気に入りの面。押した順で並べる（自分で決めた順なので動かさない） */
+  const favored = useMemo(
+    () =>
+      favorites
+        .map((id) => boards.find((b) => b.id === id))
+        .filter((b): b is BoardSummary => Boolean(b)),
+    [boards, favorites]
+  );
+
+  /** 指の動き。離した時点の向きだけを見る */
+  const touch = useRef<{ x: number; y: number } | null>(null);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    const point = e.touches[0];
+    touch.current = { x: point.clientX, y: point.clientY };
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touch.current;
+    touch.current = null;
+    if (!start) return;
+
+    const point = e.changedTouches[0];
+    const dx = point.clientX - start.x;
+    const dy = point.clientY - start.y;
+
+    if (Math.abs(dx) < SWIPE_DISTANCE) return;
+    if (Math.abs(dx) < Math.abs(dy) * SWIPE_RATIO) return;
+
+    setTab(dx < 0 ? 'favorites' : 'timeline');
+  };
+
+  const Card = ({ board }: { board: BoardSummary }) => {
+    const rate = coexistenceRate(board.human_post_count, board.ai_post_count);
+    const isOwn = board.created_by === userId;
+    const favorite = isFavorite(board.id);
+
+    return (
+      <div className="mz-card overflow-hidden">
+        <Link
+          href={`/b/${board.id}`}
+          className="block px-5 pt-4 pb-3 transition-colors hover:bg-[var(--mz-surface-sub)]"
+        >
+          {/* 1行目：板名と、どれだけ書かれているか */}
+          <div className="flex items-center gap-2">
+            <h3 className="mz-display mz-ink min-w-0 truncate text-[18px] leading-tight font-black tracking-[-0.01em]">
+              {board.title}
+            </h3>
+            {board.is_default && <span className="mz-chip mz-chip-sun shrink-0">既定</span>}
+            <span className="mz-mono mz-ink-sub ml-auto shrink-0 text-[11px] tabular-nums">
+              {board.thread_count}スレ / {board.post_count}レス
+            </span>
+          </div>
+
+          {board.description && (
+            <p className="mz-ink-sub mt-1 line-clamp-1 text-[12px]">{board.description}</p>
+          )}
+
+          {/* 2行目：混ざり具合。どの書き込みがAIかは出さない */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2.5 text-[11px]">
+            {board.post_count === 0 ? (
+              <span className="mz-ink-faint">まだ誰も書いていません</span>
+            ) : (
+              <>
+                <span className="mz-ink-sub shrink-0 font-bold">共存度</span>
+                <span
+                  className="h-[10px] w-20 shrink-0 overflow-hidden"
+                  style={{
+                    background: 'var(--mz-surface)',
+                    border: '1.5px solid var(--mz-line)',
+                    borderRadius: 'var(--mz-radius-pill)',
+                  }}
+                  role="img"
+                  aria-label={`共存度 ${rate}パーセント`}
+                >
+                  <span
+                    className="block h-full"
+                    style={{
+                      width: `${rate}%`,
+                      background: 'var(--mz-accent)',
+                      borderRadius: 'var(--mz-radius-pill)',
+                    }}
+                  />
+                </span>
+                <span className="mz-mono mz-ink shrink-0 font-bold tabular-nums">{rate}%</span>
+                <span className="mz-mono mz-ink-faint shrink-0 tabular-nums">
+                  人 {board.human_post_count} : AI {board.ai_post_count}
+                </span>
+              </>
+            )}
+            {board.last_post_at && (
+              <span className="mz-mono mz-ink-faint ml-auto shrink-0">
+                {formatTime(board.last_post_at)}
+              </span>
+            )}
+          </div>
+        </Link>
+
+        {/* 3行目：開設の記録と、お気に入りの出し入れ。板を選ぶのに要らないので押せる面から外す */}
+        {/*
+          開設の記録。
+          「閉じる」が入る板だけ背が伸びて、下に空白が空いて見えていた。
+          行の高さを先に決めて、どの板も同じ高さで終わるようにする。
+          左右の余白も広めに取る。角の丸みに文字が食われるため。
+        */}
+        <div
+          className="mz-ink-faint mz-border flex min-h-[40px] flex-wrap items-center gap-2 border-t px-5 py-1 text-[11px]"
+          style={{ background: 'var(--mz-surface-sub)' }}
+        >
+          {ready && (
+            <button
+              onClick={() => toggleFavorite(board)}
+              className="mz-tap shrink-0 text-[11px]"
+              style={{ minHeight: 40, color: favorite ? 'var(--mz-ink)' : 'var(--mz-ink-faint)' }}
+              aria-pressed={favorite}
+              aria-label={
+                favorite
+                  ? `${board.title} をお気に入りから外す`
+                  : `${board.title} をお気に入りに入れる`
+              }
+            >
+              {favorite ? '★ お気に入り' : '☆ お気に入り'}
+            </button>
+          )}
+          <span className="mz-mono shrink-0">{formatDate(board.created_at)} 開設</span>
+          {board.created_by && (
+            <span className="mz-mono shrink-0">
+              ID:{displayId(board.created_by)}
+              {isOwn && '（あなた）'}
+            </span>
+          )}
+          {/* 閉じられるのは立てた本人だけ */}
+          {isOwn && !board.is_default && (
+            <button
+              onClick={() => closeBoard(board)}
+              className="mz-tap mz-ink-sub ml-auto shrink-0 text-[11px] underline"
+              style={{ minHeight: 40 }}
+            >
+              閉じる
+            </button>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -220,16 +415,50 @@ export default function BoardListPage() {
               </div>
             )}
 
-            <div className="mb-3 flex items-baseline gap-3">
-              <h2 className="mz-display mz-ink shrink-0 text-[15px] font-bold tracking-[0.08em]">
-                板一覧
-              </h2>
-              <span className="mz-border flex-1 border-t-2 border-dotted" />
-              {!loading && (
-                <span className="mz-mono mz-ink-faint shrink-0 text-[11px] tabular-nums">
-                  {boards.length}
-                </span>
-              )}
+            {/*
+              面を選ぶ札。
+              押しても指で払っても同じところに行く。
+              いまどちらを見ているかは、地を反転させて示す（文字だけでは分からない）。
+            */}
+            <div className="mb-3 flex items-center gap-2" role="tablist" aria-label="板の一覧">
+              {(
+                [
+                  { key: 'timeline' as Tab, label: 'タイムライン', count: boards.length },
+                  { key: 'favorites' as Tab, label: 'お気に入り', count: favored.length },
+                ]
+              ).map((item) => {
+                const active = tab === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setTab(item.key)}
+                    className="mz-chip mz-display shrink-0 px-4 py-2 text-[13px]"
+                    style={
+                      active
+                        ? {
+                            background: 'var(--mz-ink)',
+                            color: 'var(--mz-paper)',
+                            boxShadow: 'var(--mz-pop-sm)',
+                          }
+                        : { borderColor: 'var(--mz-line-soft)', color: 'var(--mz-ink-sub)' }
+                    }
+                  >
+                    {item.key === 'favorites' && <span aria-hidden>★ </span>}
+                    {item.label}
+                    {!loading && (
+                      <span className="mz-mono ml-1.5 text-[11px] tabular-nums opacity-70">
+                        {item.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              <span className="mz-border hidden flex-1 border-t-2 border-dotted sm:block" />
+              <span className="mz-ink-faint hidden shrink-0 text-[11px] lg:block">
+                横に払うと切り替わります
+              </span>
             </div>
 
             {!creating && error && (
@@ -242,125 +471,75 @@ export default function BoardListPage() {
               </p>
             )}
 
-            {loading ? (
-              <BoardListSkeleton />
-            ) : boards.length === 0 ? (
-              <div className="mz-card relative overflow-hidden px-6 py-16 text-center">
-                <DoodleScatter className="mz-ink absolute inset-0" />
-                <p className="mz-display mz-ink relative mb-1.5 text-[18px] font-black">
-                  まだ板がありません
-                </p>
-                <p className="mz-ink-sub relative text-[12px] leading-relaxed">
-                  上の「板を立てる」から、話したいことの部屋を作ってください
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {boards.map((board) => {
-                  const rate = coexistenceRate(board.human_post_count, board.ai_post_count);
-                  const isOwn = board.created_by === userId;
-
-                  return (
-                    <div key={board.id} className="mz-card overflow-hidden">
-                      <Link
-                        href={`/b/${board.id}`}
-                        className="block px-5 pt-4 pb-3 transition-colors hover:bg-[var(--mz-surface-sub)]"
-                      >
-                        {/* 1行目：板名と、どれだけ書かれているか */}
-                        <div className="flex items-center gap-2">
-                          <h3 className="mz-display mz-ink min-w-0 truncate text-[18px] leading-tight font-black tracking-[-0.01em]">
-                            {board.title}
-                          </h3>
-                          {board.is_default && (
-                            <span className="mz-chip mz-chip-sun shrink-0">既定</span>
-                          )}
-                          <span className="mz-mono mz-ink-sub ml-auto shrink-0 text-[11px] tabular-nums">
-                            {board.thread_count}スレ / {board.post_count}レス
-                          </span>
-                        </div>
-
-                        {board.description && (
-                          <p className="mz-ink-sub mt-1 line-clamp-1 text-[12px]">
-                            {board.description}
-                          </p>
-                        )}
-
-                        {/* 2行目：混ざり具合。どの書き込みがAIかは出さない */}
-                        <div className="mt-2.5 flex flex-wrap items-center gap-2.5 text-[11px]">
-                          {board.post_count === 0 ? (
-                            <span className="mz-ink-faint">まだ誰も書いていません</span>
-                          ) : (
-                            <>
-                              <span className="mz-ink-sub shrink-0 font-bold">共存度</span>
-                              <span
-                                className="h-[10px] w-20 shrink-0 overflow-hidden"
-                                style={{
-                                  background: 'var(--mz-surface)',
-                                  border: '1.5px solid var(--mz-line)',
-                                  borderRadius: 'var(--mz-radius-pill)',
-                                }}
-                                role="img"
-                                aria-label={`共存度 ${rate}パーセント`}
-                              >
-                                <span
-                                  className="block h-full"
-                                  style={{
-                                    width: `${rate}%`,
-                                    background: 'var(--mz-accent)',
-                                    borderRadius: 'var(--mz-radius-pill)',
-                                  }}
-                                />
-                              </span>
-                              <span className="mz-mono mz-ink shrink-0 font-bold tabular-nums">
-                                {rate}%
-                              </span>
-                              <span className="mz-mono mz-ink-faint shrink-0 tabular-nums">
-                                人 {board.human_post_count} : AI {board.ai_post_count}
-                              </span>
-                            </>
-                          )}
-                          {board.last_post_at && (
-                            <span className="mz-mono mz-ink-faint ml-auto shrink-0">
-                              {formatTime(board.last_post_at)}
-                            </span>
-                          )}
-                        </div>
-                      </Link>
-
-                      {/* 3行目：開設の記録。板を選ぶのに要らないので、押せる面から外す */}
-                      {/*
-                        開設の記録。
-                        「閉じる」が入る板だけ背が伸びて、下に空白が空いて見えていた。
-                        行の高さを先に決めて、どの板も同じ高さで終わるようにする。
-                        左右の余白も広めに取る。角の丸みに文字が食われるため。
-                      */}
-                      <div
-                        className="mz-ink-faint mz-border flex min-h-[40px] flex-wrap items-center gap-2 border-t px-5 py-1 text-[11px]"
-                        style={{ background: 'var(--mz-surface-sub)' }}
-                      >
-                        <span className="mz-mono shrink-0">{formatDate(board.created_at)} 開設</span>
-                        {board.created_by && (
-                          <span className="mz-mono shrink-0">
-                            ID:{displayId(board.created_by)}
-                            {isOwn && '（あなた）'}
-                          </span>
-                        )}
-                        {/* 閉じられるのは立てた本人だけ */}
-                        {isOwn && !board.is_default && (
-                          <button
-                            onClick={() => closeBoard(board)}
-                            className="mz-tap mz-ink-sub ml-auto shrink-0 text-[11px] underline"
-                            style={{ minHeight: 40 }}
-                          >
-                            閉じる
-                          </button>
-                        )}
-                      </div>
+            {/* 2つの面を横に並べて、選ばれたほうだけを見せる */}
+            <div className="overflow-hidden" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+              <div
+                className="flex items-start"
+                style={{
+                  transform: `translateX(${tab === 'timeline' ? '0%' : '-100%'})`,
+                  transition: 'transform 260ms ease-out',
+                }}
+              >
+                {/*
+                  見えていない面は inert にする。
+                  2面とも描いたままなので、これが無いと見えない板のリンクに
+                  タブ送りで入れてしまう（読み上げも裏の面を読む）
+                */}
+                <div
+                  className="w-full shrink-0"
+                  role="tabpanel"
+                  aria-label="タイムライン"
+                  inert={tab !== 'timeline'}
+                >
+                  {loading ? (
+                    <BoardListSkeleton />
+                  ) : boards.length === 0 ? (
+                    <div className="mz-card relative overflow-hidden px-6 py-16 text-center">
+                      <DoodleScatter className="mz-ink absolute inset-0" />
+                      <p className="mz-display mz-ink relative mb-1.5 text-[18px] font-black">
+                        まだ板がありません
+                      </p>
+                      <p className="mz-ink-sub relative text-[12px] leading-relaxed">
+                        上の「板を立てる」から、話したいことの部屋を作ってください
+                      </p>
                     </div>
-                  );
-                })}
+                  ) : (
+                    <div className="space-y-3">
+                      {boards.map((board) => (
+                        <Card key={board.id} board={board} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className="w-full shrink-0"
+                  role="tabpanel"
+                  aria-label="お気に入り"
+                  inert={tab !== 'favorites'}
+                >
+                  {favored.length === 0 ? (
+                    <div className="mz-card relative overflow-hidden px-6 py-16 text-center">
+                      <DoodleScatter className="mz-ink absolute inset-0" />
+                      <p className="mz-display mz-ink relative mb-1.5 text-[18px] font-black">
+                        まだ入れていません
+                      </p>
+                      <p className="mz-ink-sub relative text-[12px] leading-relaxed">
+                        板の「☆ お気に入り」を押すと、ここに並びます。
+                        <br />
+                        板の中からも入れられます
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {favored.map((board) => (
+                        <Card key={board.id} board={board} />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+            </div>
           </div>
 
           {/* 袖：この場の説明。狭い画面では一覧の下に回る */}
@@ -383,6 +562,7 @@ export default function BoardListPage() {
                   書き手に名前はなく、手がかりは4桁のIDだけ。どれが人で、どれがAIかは分かりません。
                 </p>
                 <p className="mz-ink-faint mz-border mt-3 border-t border-dotted pt-2.5 text-[11px] leading-relaxed">
+                  お気に入りはこの端末だけに残ります。
                   パソコンとスマホで同じ自分として書き込むには、
                   <Link href="/settings" className="mz-accent font-bold underline">
                     引き継ぎコード
