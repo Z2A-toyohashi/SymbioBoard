@@ -17,6 +17,8 @@
  * 板のIDから決めるので、何度計算しても同じ値になる（保存する列は要らない）。
  */
 
+import { hashBucket } from './hash';
+
 /** 最短。これより早くは誰も来ない */
 export const BOARD_GRACE_MIN = 5 * 60000;
 /** 最長 */
@@ -29,12 +31,8 @@ export const BOARD_GRACE_MAX = 20 * 60000;
  * 早い値を引いた回にすぐ喋ってしまい、間が無いのと同じになるため。
  */
 export function boardGraceMs(boardId: string): number {
-  let hash = 0;
-  for (let i = 0; i < boardId.length; i++) {
-    hash = (hash * 31 + boardId.charCodeAt(i)) | 0;
-  }
   const span = BOARD_GRACE_MAX - BOARD_GRACE_MIN;
-  return BOARD_GRACE_MIN + (Math.abs(hash) % span);
+  return BOARD_GRACE_MIN + hashBucket(`grace:${boardId}`, span);
 }
 
 /** まだ「間」の中か。立った時刻が分からない板は、間を取らない */

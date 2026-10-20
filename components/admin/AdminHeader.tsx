@@ -11,6 +11,7 @@ import { usePathname } from 'next/navigation';
 const SETTINGS = [{ label: '場の設定', path: '/admin' }];
 
 const RECORDS = [
+  { label: '訪問者', path: '/admin/visitors' },
   { label: '書き込み', path: '/admin/posts' },
   { label: '行動', path: '/admin/activity' },
   { label: '1対1ログ', path: '/admin/chat-log' },

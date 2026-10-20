@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
-import { canRevealCoexistence } from '@/lib/coexistence';
+import { canRevealCoexistence, countCoexistenceEvidence } from '@/lib/coexistence';
 import type { Post } from '@/types';
 
 /**
@@ -48,11 +48,9 @@ export async function GET(request: NextRequest) {
     const rows = (data || []) as Post[];
     const aiCount = rows.filter((p) => p.author_type === 'ai').length;
     const humanCount = rows.length - aiCount;
-    const othersHumanCount = rows.filter(
-      (p) => p.author_type !== 'ai' && p.author_id !== userId
-    ).length;
 
-    const revealed = isAdmin || canRevealCoexistence(othersHumanCount, aiCount);
+    // 件数とID数の両方で見る。IDが少ないと、件数が多くても正体が割れる
+    const revealed = isAdmin || canRevealCoexistence(countCoexistenceEvidence(rows, userId));
 
     return NextResponse.json({
       posts: isAdmin

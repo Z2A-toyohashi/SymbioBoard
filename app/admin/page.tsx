@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import AdminHeader from '@/components/admin/AdminHeader';
 import AISettings from '@/components/admin/AISettings';
 import AIResidents from '@/components/admin/AIResidents';
-import HumanRoster from '@/components/admin/HumanRoster';
 import AIDiagnose from '@/components/admin/AIDiagnose';
 import BoardAdmin from '@/components/admin/BoardAdmin';
 import StampAdmin from '@/components/admin/StampAdmin';
@@ -59,9 +59,21 @@ export default function AdminPage() {
           />
         </section>
 
+        {/*
+          人の一覧は「訪問者」タブに移した。
+          設定を決める画面と、人を見る画面は目的が違う。
+          ここに残すのは、設定を決めるときに要る「いま何人いるか」だけ。
+        */}
+        <p className="mz-ink-sub text-[12px]">
+          ひとりずつの訪問回数や滞在時間は{' '}
+          <Link href="/admin/visitors" className="mz-accent font-bold underline">
+            訪問者
+          </Link>{' '}
+          で見られます。
+        </p>
+
         <AIDiagnose />
         <AISettings currentAIDensity={aiDensity} />
-        <HumanRoster />
         <AIResidents />
         <BoardAdmin />
         <StampAdmin />

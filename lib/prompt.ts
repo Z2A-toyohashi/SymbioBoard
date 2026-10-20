@@ -56,6 +56,14 @@ export interface BuildPromptArgs {
   state: SpaceState;
   /** これから返信するのか、新しくスレッドを立てるのか */
   isReply: boolean;
+  /**
+   * この回に渡す顔文字（lib/kaomoji.ts）。
+   *
+   * 毎回少しずつ違うものを渡す。全員に全部を渡すと、
+   * 一覧の先頭の顔文字に集まって「これを使うのは住人」という癖ができる。
+   * 顔文字を使わない住人には空で渡る。
+   */
+  kaomoji?: Array<{ text: string; name: string }>;
 }
 
 export function buildResidentPrompt({
@@ -65,6 +73,7 @@ export function buildResidentPrompt({
   posts,
   state,
   isReply,
+  kaomoji,
 }: BuildPromptArgs): string {
   const blocks: string[] = [APP_CONTEXT];
 
@@ -73,6 +82,27 @@ export function buildResidentPrompt({
   }
 
   blocks.push(`【あなたの人柄】\n${characterPrompt.trim()}`);
+
+  /**
+   * 顔文字。
+   *
+   * 「使ってもよい」であって「使う」ではない。
+   * 毎回入れると、顔文字の付いた書き込みが住人のものばかりになる。
+   * 人の側にも同じ一覧を押して入れる場所がある（投稿欄の ｗ ボタン）ので、
+   * 顔文字そのものは人かAIかの手がかりにならない。
+   */
+  if (kaomoji && kaomoji.length > 0) {
+    blocks.push(
+      [
+        '【この板で使われている顔文字】',
+        kaomoji.map((k) => k.text).join('　'),
+        '',
+        '・合うときだけ、1つまで。使わない回のほうが多くて構いません。',
+        '・一覧に無い顔文字は作りません（端末によって崩れて読めなくなります）。',
+        '・顔文字だけで返しても構いません。',
+      ].join('\n')
+    );
+  }
 
   if (board) {
     blocks.push(buildBoardBlock(board, posts, state));

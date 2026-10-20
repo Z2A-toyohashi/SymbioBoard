@@ -1,19 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { formatTime } from '@/lib/utils';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { displayId } from '@/lib/short-id';
 
 /**
- * 人の行動の記録。
+ * 人の行動の記録（1件ずつ）。
  *
  * これまで管理画面で見られたのは「書き込み」だけだった。
  * 書かれたものは結果で、知りたいのはそこに至るまでの動き
  * （どの板を開いて、どれだけ読んで、何を押して、何も書かずに帰ったか）。
  * 書き込みログだけを見ていると、一度も書かなかった人が存在しないことになる。
  *
- * 画面は2段。上がひとりずつの合計、下が1件ずつの流れ。
- * 先に「誰が何回来ているか」を見て、気になるIDで絞って流れを読む、という順。
+ * ひとりずつの合計は「訪問者」タブに移した。
+ * 同じものを2か所に出すと、どちらが本当の数字か分からなくなる。
+ * 分担は、あちらが「人ごと」、ここが「1件ごと」。
+ * 訪問者タブでIDを押すと、そのIDで絞ったこの画面に来る（?userId=）。
  *
  * 行動の名前は logs.event_type に入っている英語のまま持ち、
  * 日本語はここで当てる。データ側を日本語にすると、
@@ -54,20 +57,8 @@ interface LogRow {
   created_at: number;
 }
 
-interface Summary {
-  userId: string;
-  isAI: boolean;
-  counts: Record<string, number>;
-  total: number;
-  boards: string[];
-  dwellMs: number;
-  firstAt: number;
-  lastAt: number;
-}
-
 export default function ActivityLog() {
   const [logs, setLogs] = useState<LogRow[]>([]);
-  const [summaries, setSummaries] = useState<Summary[]>([]);
   const [eventCounts, setEventCounts] = useState<Record<string, number>>({});
   const [boards, setBoards] = useState<Array<{ id: string; title: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +66,9 @@ export default function ActivityLog() {
   const [window_, setWindow] = useState(0);
 
   const [humansOnly, setHumansOnly] = useState(true);
-  const [userId, setUserId] = useState('');
+  /** 訪問者タブからは ?userId=… で来る。そのIDで絞った状態で開く */
+  const searchParams = useSearchParams();
+  const [userId, setUserId] = useState(searchParams.get('userId') || '');
   const [event, setEvent] = useState('');
   const [boardId, setBoardId] = useState('');
 
@@ -92,7 +85,6 @@ export default function ActivityLog() {
       const data = await res.json();
 
       setLogs(data.logs || []);
-      setSummaries(data.summaries || []);
       setEventCounts(data.eventCounts || {});
       setBoards(data.boards || []);
       setScanned(data.scanned || 0);
@@ -179,80 +171,17 @@ export default function ActivityLog() {
         </div>
 
         <p className="mz-ink-faint mt-2.5 text-[11px] leading-relaxed">
-          合計は直近{window_}件の記録から作っています（いま{scanned}件を見ました）。
-          これに達しているときは、それより前の記録は数えていません。
+          直近{window_}件の記録から絞り込んでいます（いま{scanned}件を見ました）。
+          これに達しているときは、それより前の記録は見ていません。
           <br />
           滞在時間は、板を開いてから離れるまでを足したもの。裏に回っている間は数えません。
+          <br />
+          ひとりずつの訪問回数や合計は{' '}
+          <Link href="/admin/visitors" className="mz-accent font-bold underline">
+            訪問者
+          </Link>{' '}
+          にあります。
         </p>
-      </section>
-
-      {/* ひとりずつ */}
-      <section className="mz-card p-4 sm:p-5">
-        <div className="mb-3 flex flex-wrap items-baseline gap-2">
-          <h3 className="mz-ink text-[17px] font-bold tracking-[-0.01em]">ひとりずつ</h3>
-          <span className="mz-mono mz-ink-sub text-[13px]">{summaries.length}人</span>
-        </div>
-
-        {loading ? (
-          <p className="mz-ink-faint py-6 text-center text-sm">読み込み中…</p>
-        ) : summaries.length === 0 ? (
-          <p className="mz-ink-faint py-6 text-center text-sm">記録がありません</p>
-        ) : (
-          <div className="mz-border overflow-x-auto rounded-[var(--mz-radius-sm)] border">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="mz-surface-sub mz-border mz-ink-sub border-b text-[11px]">
-                  <th className="px-3 py-2 font-semibold">ID</th>
-                  <th className="px-3 py-2 font-semibold">行動</th>
-                  <th className="px-3 py-2 font-semibold">書いた</th>
-                  <th className="px-3 py-2 font-semibold">開いた板</th>
-                  <th className="px-3 py-2 font-semibold">読んでいた時間</th>
-                  <th className="px-3 py-2 font-semibold">押した</th>
-                  <th className="px-3 py-2 font-semibold">見立て</th>
-                  <th className="px-3 py-2 font-semibold">最後</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summaries.map((s) => {
-                  const wrote = (s.counts.post || 0) + (s.counts.reply || 0);
-                  return (
-                    <tr key={s.userId} className="mz-border border-b last:border-b-0">
-                      <td className="px-3 py-2">
-                        <button
-                          onClick={() => setUserId(s.userId)}
-                          className="mz-mono mz-ink text-[13px] underline"
-                          title="このIDで絞る"
-                        >
-                          {s.userId}
-                        </button>
-                        {s.isAI && <span className="mz-chip mz-chip-quiet ml-2">AI</span>}
-                      </td>
-                      <td className="mz-mono mz-ink px-3 py-2 text-[12px] tabular-nums">
-                        {s.total}
-                      </td>
-                      <td className="mz-mono mz-ink px-3 py-2 text-[12px] tabular-nums">{wrote}</td>
-                      <td className="mz-mono mz-ink-sub px-3 py-2 text-[12px] tabular-nums">
-                        {s.boards.length}
-                      </td>
-                      <td className="mz-mono mz-ink-sub px-3 py-2 text-[12px] tabular-nums">
-                        {formatDuration(s.dwellMs)}
-                      </td>
-                      <td className="mz-mono mz-ink-sub px-3 py-2 text-[12px] tabular-nums">
-                        {s.counts.reaction_add || 0}
-                      </td>
-                      <td className="mz-mono mz-ink-sub px-3 py-2 text-[12px] tabular-nums">
-                        {s.counts.guess || 0}
-                      </td>
-                      <td className="mz-mono mz-ink-faint px-3 py-2 text-[12px]">
-                        {formatTime(s.lastAt)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
       </section>
 
       {/* 1件ずつ */}

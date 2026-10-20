@@ -10,6 +10,8 @@ import { maybeCreateBoard } from './ai-board';
 import { createStampAsResident } from './ai-stamp';
 import { wakefulness } from './ai-hours';
 import { isWithinBoardGrace } from './board-grace';
+import { planLength } from './ai-length';
+import { sampleKaomoji, usesKaomoji } from './kaomoji';
 
 /**
  * 板ごとの自立発言。
@@ -564,6 +566,21 @@ async function speakOnClaimedBoard(
     posts,
     state,
     isReply: Boolean(thread_id),
+    // 顔文字を使う住人にだけ、毎回違う組み合わせを渡す
+    kaomoji: usesKaomoji(aiCharacter.id) ? sampleKaomoji(5) : [],
+  });
+
+  /**
+   * この回の長さ。
+   *
+   * 毎回「60文字以内、1〜2文」だったので、住人の書き込みは長さが揃っていた。
+   * 人は「わかる」の3文字で済ませることも、長く書くこともある。
+   * 帯を引いて、ひと言から長めまでばらす（lib/ai-length.ts）。
+   */
+  const lengthPlan = planLength({
+    maxResponseLength: config.max_response_length,
+    residentId: aiCharacter.id,
+    isReply: Boolean(thread_id),
   });
 
   /**
@@ -587,7 +604,8 @@ async function speakOnClaimedBoard(
       config.gpt_temperature,
       config.gpt_presence_penalty,
       config.gpt_frequency_penalty,
-      config.gpt_model
+      config.gpt_model,
+      lengthPlan
     );
 
   const content = await writeNormally();
@@ -1193,6 +1211,14 @@ async function answerPendingReply(
       posts,
       state,
       isReply: true,
+      kaomoji: usesKaomoji(parent.author_id) ? sampleKaomoji(5) : [],
+    });
+
+    // 答えるだけの回なので、ひと言で済むことも多い（lib/ai-length.ts）
+    const lengthPlan = planLength({
+      maxResponseLength: config.max_response_length,
+      residentId: parent.author_id,
+      isReply: true,
     });
 
     const content = await generateAIResponseWithGPT(
@@ -1210,7 +1236,8 @@ async function answerPendingReply(
       config.gpt_temperature,
       config.gpt_presence_penalty,
       config.gpt_frequency_penalty,
-      config.gpt_model
+      config.gpt_model,
+      lengthPlan
     );
 
     if (!content || !content.trim()) {

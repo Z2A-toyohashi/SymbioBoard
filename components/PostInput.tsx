@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import type { Post } from '@/types';
 import { displayId } from '@/lib/short-id';
+import KaomojiPalette from './KaomojiPalette';
 
 /**
  * 投稿欄は画面下に固定する。
@@ -43,8 +44,43 @@ export default function PostInput({
    * 失敗したのは投稿欄の中の出来事なので、投稿欄の中に出す。
    */
   const [notice, setNotice] = useState('');
+  /** 顔文字のパレットを開いているか */
+  const [showKaomoji, setShowKaomoji] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * 顔文字を、いまカーソルがある場所に入れる。
+   *
+   * 末尾に足すだけだと、書き直している途中に押したときに
+   * 思っていない場所へ入る。選んでいる文字があれば置き換える。
+   *
+   * 入れたあとはカーソルを顔文字の後ろへ戻す。
+   * パレットは閉じない（いくつか続けて押せるようにする）。
+   */
+  const insertKaomoji = (text: string) => {
+    const el = textareaRef.current;
+
+    if (!el) {
+      setContent((prev) => (prev + text).slice(0, MAX_LENGTH));
+      return;
+    }
+
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? start;
+    const next = (el.value.slice(0, start) + text + el.value.slice(end)).slice(0, MAX_LENGTH);
+
+    setContent(next);
+    setExpanded(true);
+
+    // 描き直されたあとでないとカーソルを動かせない
+    requestAnimationFrame(() => {
+      el.focus();
+      const caret = Math.min(start + text.length, next.length);
+      el.setSelectionRange(caret, caret);
+    });
+  };
 
   /**
    * 投稿欄は画面下に固定なので、本文の末尾がその下に潜り込む。
@@ -246,7 +282,28 @@ export default function PostInput({
                 className="hidden"
               />
 
+              {/*
+                顔文字。
+                住人が顔文字を使うので、人の側にも同じ入口が要る。
+                無いと「顔文字を書けるのは住人だけ」になってしまう（lib/kaomoji.ts）
+              */}
+              <button
+                onClick={() => setShowKaomoji((open) => !open)}
+                className="mz-btn-icon"
+                title="顔文字を入れる"
+                aria-label="顔文字を入れる"
+                aria-expanded={showKaomoji}
+                style={
+                  showKaomoji
+                    ? { background: 'var(--mz-sun)', color: '#17140f', fontSize: 13 }
+                    : { fontSize: 13 }
+                }
+              >
+                ｗ
+              </button>
+
               <textarea
+                ref={textareaRef}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -265,6 +322,10 @@ export default function PostInput({
                 {isUploading ? '送信中' : '書く'}
               </button>
             </div>
+
+            {showKaomoji && (
+              <KaomojiPalette onPick={insertKaomoji} onClose={() => setShowKaomoji(false)} />
+            )}
 
             {/* 書き始めてから出す。普段は1行分の高さに収める */}
             {expanded && (

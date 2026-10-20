@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase-client';
 import { displayId } from '@/lib/short-id';
-import { canRevealCoexistence } from '@/lib/coexistence';
+import { canRevealCoexistence, countCoexistenceEvidence } from '@/lib/coexistence';
 import { boardGraceMs } from '@/lib/board-grace';
 import type { BoardSummary, Participant } from '@/types';
 
@@ -82,10 +82,9 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.post_count - a.post_count);
 
       const aiPostCount = boardPosts.filter((p) => p.author_type === 'ai').length;
-      const othersHumanCount = boardPosts.filter(
-        (p) => p.author_type !== 'ai' && p.author_id !== userId
-      ).length;
-      const revealed = isAdmin || canRevealCoexistence(othersHumanCount, aiPostCount);
+      // 件数とID数の両方で見る。IDが少ないと、件数が多くても正体が割れる
+      const revealed =
+        isAdmin || canRevealCoexistence(countCoexistenceEvidence(boardPosts, userId));
 
       return {
         ...board,

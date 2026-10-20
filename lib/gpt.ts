@@ -3,6 +3,7 @@ import type { Post } from '@/types';
 import { dropDanglingSentence, trimToNaturalEnd } from './text';
 import { stripUrls } from './url-text';
 import { isReasoningModel } from './ai-cost';
+import type { LengthPlan } from './ai-length';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -16,9 +17,21 @@ export async function generateAIResponseWithGPT(
   temperature: number = 1.0,
   presencePenalty: number = 0.6,
   frequencyPenalty: number = 0.6,
-  model: string = 'gpt-4.1-mini'
+  model: string = 'gpt-4.1-mini',
+  /**
+   * この回の長さ（lib/ai-length.ts）。
+   *
+   * 渡されなければ従来どおり「maxLength 以内、1〜2文」。
+   * 渡された帯で、ひと言の相槌から長めの独り言まで出方が変わる。
+   * 長さが毎回同じだと、それだけで人かAIかの見分けになる。
+   */
+  lengthPlan?: LengthPlan
 ): Promise<string | null> {
   try {
+    const limit = lengthPlan?.maxChars ?? maxLength;
+    const lengthLine = lengthPlan
+      ? lengthPlan.instruction
+      : `- ${maxLength}文字以内、1〜2文。自然な会話口調で。`;
     // 画像があるかチェック。モデルは設定から来る（画像付きでも同じものを使う）
     const hasImage = targetPost?.media_url;
 
@@ -32,7 +45,7 @@ export async function generateAIResponseWithGPT(
         content:
           `${systemPrompt}\n\n【書き方】\n` +
           `- あなた自身の発言だけを書きます。他の人のIDやコロン（:）は含めません。\n` +
-          `- ${maxLength}文字以内、1〜2文。自然な会話口調で。\n` +
+          `${lengthLine}\n` +
           `- 言いかけで終わらせず、必ず最後まで言い切ります。` +
           `収まりそうになければ、短い一文に言い換えてください。`,
       },
@@ -105,7 +118,7 @@ export async function generateAIResponseWithGPT(
 
     // 文字数の上限は後段で見る。ここでは言い切れるだけの余白を渡す。
     // 短く絞りすぎると毎回トークン上限で文が途切れる。
-    const budget = Math.min(400, Math.max(80, Math.ceil(maxLength * 2.5)));
+    const budget = Math.min(600, Math.max(80, Math.ceil(limit * 2.5)));
 
     // gpt-5 系は temperature などを受け付けず、送るとエラーで黙ってしまう。
     // 考えるぶんの出力も要るので、上限は多めに渡す。
@@ -148,19 +161,29 @@ export async function generateAIResponseWithGPT(
 
     if (!cleanedContent) return null;
 
+    /**
+     * ひと言のつもりが長くなったとき。
+     *
+     * 「わかる」で済ませる回なのに2文返ってきたら、頭の1文だけを残す。
+     * 文字数で機械的に切ると「わかるけど、それはそ…」になって、
+     * 相槌でも独り言でもないものが残る。
+     */
+    const shortened =
+      lengthPlan?.band === 'word' ? firstSentence(cleanedContent) : cleanedContent;
+
     // トークン上限で止められた場合は、言いかけの最後の一文を落とす。
     // 落とした結果なにも残らなければ書かない。
     if (choice?.finish_reason === 'length') {
-      const settled = dropDanglingSentence(cleanedContent);
+      const settled = dropDanglingSentence(shortened);
       if (!settled) {
         console.error('AI response was cut off mid-sentence. Skipping the post.');
         return null;
       }
-      return trimToNaturalEnd(settled, maxLength);
+      return trimToNaturalEnd(settled, limit);
     }
 
     // 文の途中で切らずに、設定された文字数へ寄せる
-    return trimToNaturalEnd(cleanedContent, maxLength);
+    return trimToNaturalEnd(shortened, limit);
   } catch (error) {
     console.error('GPT API error:', error);
     // 生成に失敗したら null を返す。
@@ -169,4 +192,16 @@ export async function generateAIResponseWithGPT(
     // 板に残り続ける。失敗したときは書かないほうが場が荒れない。
     return null;
   }
+}
+
+/**
+ * 頭の1文だけを残す。
+ *
+ * 「ひと言」の回に使う。句点や感嘆符、改行で切る。
+ * どれも無ければそのまま返す（短い相槌には句点が無いことが多い）。
+ */
+function firstSentence(text: string): string {
+  const match = text.match(/^[^。．！？!?\n]*[。．！？!?]?/);
+  const head = match?.[0]?.trim();
+  return head && head.length > 0 ? head : text;
 }

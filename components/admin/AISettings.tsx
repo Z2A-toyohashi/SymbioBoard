@@ -416,8 +416,8 @@ export default function AISettings({ currentAIDensity = 0 }: { currentAIDensity?
       <Section title="言葉づかい" note="生成される発言そのものの調整です。">
         <div className="grid gap-3 sm:grid-cols-2">
           <NumberField
-            label="発言の長さ上限"
-            hint="掲示板なので短いほど馴染む"
+            label="発言の長さの目安"
+            hint="毎回この長さにはなりません。ひと言（「わかる」）から、たまにこの2.5倍まで散らします。長さが揃っていると、それだけで人かAIかの見分けになるため"
             unit="文字"
             value={settings.max_response_length}
             min={5}

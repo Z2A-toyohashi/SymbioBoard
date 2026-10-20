@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import AdminHeader from '@/components/admin/AdminHeader';
 import ActivityLog from '@/components/admin/ActivityLog';
 
@@ -8,6 +9,10 @@ import ActivityLog from '@/components/admin/ActivityLog';
  *
  * 「書き込み」の隣に置いた。あちらは結果（何が書かれたか）、
  * こちらは経過（どこを見て、何を押して、どれだけ読んだか）。
+ *
+ * Suspense で囲んでいるのは、中で ?userId= を読んでいるため
+ * （訪問者タブからIDで絞って飛んでくる）。
+ * 囲まないと、この画面を先に書き出せずビルドが止まる。
  */
 export default function ActivityPage() {
   return (
@@ -19,7 +24,11 @@ export default function ActivityPage() {
           読んだ・押した・見立てた・板を移ったところまで残しています。
           板の側には、いまもどの書き込みが人かAIかは出していません。
         </p>
-        <ActivityLog />
+        <Suspense
+          fallback={<p className="mz-ink-faint py-6 text-center text-sm">読み込み中…</p>}
+        >
+          <ActivityLog />
+        </Suspense>
       </main>
     </div>
   );
