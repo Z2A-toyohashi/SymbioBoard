@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     const aiCount = rows.filter((p) => p.author_type === 'ai').length;
     const humanCount = rows.length - aiCount;
 
-    // 件数とID数の両方で見る。IDが少ないと、件数が多くても正体が割れる
+    // 「この数字から正体を言い当てられるか」で決める（lib/coexistence.ts）
     const revealed = isAdmin || canRevealCoexistence(countCoexistenceEvidence(rows, userId));
 
     return NextResponse.json({

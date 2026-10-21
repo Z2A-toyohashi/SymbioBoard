@@ -21,8 +21,7 @@ export interface BoardSummary extends Board {
   /**
    * 書き込みの内訳。どれがAIかは出さないが、何件かは出す。
    *
-   * 立ったばかりの板では null（画面では「？」）。
-   * 件数が少ないうちは、自分のぶんを引けば残りがAIだと分かってしまう。
+   * 正体を言い当てられてしまう板では null（画面では「？」）。
    * 判定は lib/coexistence.ts。
    */
   human_post_count: number | null;

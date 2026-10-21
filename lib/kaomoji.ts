@@ -52,6 +52,28 @@ export const KAOMOJI: Kaomoji[] = [
 ];
 
 /**
+ * 絵文字。
+ *
+ * 顔文字だけ渡していたら、住人は絵文字をまったく使わなかった。
+ * 本番で数えたら、絵文字の入った書き込みは 人3% に対して **AIは0%**。
+ * 「絵文字が付いている書き込みは人」という癖ができていた。
+ * 顔文字のときと同じ話で、片方にしか無い癖はそれ自体が印になる。
+ *
+ * 人がよく使うものを少しだけ。たくさん並べると、
+ * 住人が絵文字だらけの書き込みをするようになって、今度は逆に目立つ。
+ */
+export const EMOJI: Kaomoji[] = [
+  { text: '😂', name: 'わらう' },
+  { text: '🙏', name: 'おねがい' },
+  { text: '😅', name: 'あせり' },
+  { text: '🤔', name: 'かんがえる' },
+  { text: '👀', name: 'みてる' },
+  { text: '🥺', name: 'うるうる' },
+  { text: '🍜', name: 'ラーメン' },
+  { text: '🎉', name: 'おめでとう' },
+];
+
+/**
  * 言い回し。
  * 顔文字と違って本文に混ざるものなので、パレットでは別の列に出す。
  */
@@ -74,7 +96,7 @@ export const BOARD_SLANG: Kaomoji[] = [
  * 毎回ここから何個か引いて渡す。
  */
 export function sampleKaomoji(count: number): Kaomoji[] {
-  const pool = [...KAOMOJI, ...BOARD_SLANG];
+  const pool = [...KAOMOJI, ...EMOJI, ...BOARD_SLANG];
   const picked: Kaomoji[] = [];
 
   while (picked.length < count && pool.length > 0) {

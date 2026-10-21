@@ -1,6 +1,6 @@
 'use client';
 
-import { BOARD_SLANG, KAOMOJI } from '@/lib/kaomoji';
+import { BOARD_SLANG, EMOJI, KAOMOJI } from '@/lib/kaomoji';
 
 /**
  * 顔文字のパレット。
@@ -59,8 +59,19 @@ export default function KaomojiPalette({ onPick, onClose }: KaomojiPaletteProps)
         ))}
       </div>
 
-      {/* 言い回し。本文に混ざるものなので列を分ける */}
+      {/* 言い回しと絵文字。本文に混ざるものなので列を分ける */}
       <div className="mz-scroll-x flex gap-1.5">
+        {EMOJI.map((item) => (
+          <button
+            key={item.text}
+            onClick={() => onPick(item.text)}
+            className="mz-chip shrink-0 px-2.5 py-2 text-[15px]"
+            style={{ borderColor: 'var(--mz-line-soft)', minHeight: 40 }}
+            aria-label={item.name}
+          >
+            {item.text}
+          </button>
+        ))}
         {BOARD_SLANG.map((item) => (
           <button
             key={item.text}
